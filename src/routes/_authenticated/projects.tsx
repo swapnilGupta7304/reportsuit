@@ -47,7 +47,7 @@ function Page() {
     },
   });
 
-  const [form, setForm] = useState({ name: "", project_type: "website" as const, website_url: "", description: "", organization_id: "" });
+  const [form, setForm] = useState<{ name: string; project_type: "website" | "app" | "both"; website_url: string; description: string; organization_id: string }>({ name: "", project_type: "website", website_url: "", description: "", organization_id: "" });
 
   const create = useMutation({
     mutationFn: async () => {
