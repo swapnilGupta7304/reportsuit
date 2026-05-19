@@ -132,7 +132,12 @@ function Page() {
       </Section>
 
       {ga4Integration && currentProject && (
-        <Ga4ProjectSection integrationId={ga4Integration.id} projectId={currentProject.id} projectName={currentProject.name} />
+        <Ga4ProjectSection
+          integrationId={ga4Integration.id}
+          projectId={currentProject.id}
+          projectName={currentProject.name}
+          autoOpen={search.connected === "ga4"}
+        />
       )}
     </div>
   );
