@@ -132,13 +132,18 @@ function Page() {
       </Section>
 
       {ga4Integration && currentProject && (
-        <Ga4ProjectSection integrationId={ga4Integration.id} projectId={currentProject.id} projectName={currentProject.name} />
+        <Ga4ProjectSection
+          integrationId={ga4Integration.id}
+          projectId={currentProject.id}
+          projectName={currentProject.name}
+          autoOpen={search.connected === "ga4"}
+        />
       )}
     </div>
   );
 }
 
-function Ga4ProjectSection({ integrationId, projectId, projectName }: { integrationId: string; projectId: string; projectName: string }) {
+function Ga4ProjectSection({ integrationId, projectId, projectName, autoOpen }: { integrationId: string; projectId: string; projectName: string; autoOpen?: boolean }) {
   const qc = useQueryClient();
   const listFn = useServerFn(listGa4Properties);
   const linkFn = useServerFn(linkGa4Property);
@@ -159,15 +164,6 @@ function Ga4ProjectSection({ integrationId, projectId, projectName }: { integrat
     queryFn: () => listFn({ data: { integrationId } }),
   });
 
-  const link = useMutation({
-    mutationFn: async () => {
-      const p = properties?.find(x => x.propertyId === selectedProperty);
-      return linkFn({ data: { integrationId, projectId, propertyId: selectedProperty, propertyName: p ? `${p.account} · ${p.displayName}` : undefined } });
-    },
-    onSuccess: () => { toast.success("GA4 property linked"); setPickerOpen(false); qc.invalidateQueries({ queryKey: ["ga4-linked", projectId] }); },
-    onError: (e: any) => toast.error(e.message),
-  });
-
   const sync = useMutation({
     mutationFn: () => syncFn({ data: { projectId } }),
     onSuccess: (r: any) => {
@@ -176,6 +172,25 @@ function Ga4ProjectSection({ integrationId, projectId, projectName }: { integrat
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const link = useMutation({
+    mutationFn: async () => {
+      const p = properties?.find(x => x.propertyId === selectedProperty);
+      return linkFn({ data: { integrationId, projectId, propertyId: selectedProperty, propertyName: p ? `${p.account} · ${p.displayName}` : undefined } });
+    },
+    onSuccess: () => {
+      toast.success("GA4 property linked — starting initial sync…");
+      setPickerOpen(false);
+      qc.invalidateQueries({ queryKey: ["ga4-linked", projectId] });
+      sync.mutate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // Auto-open picker right after OAuth callback if no property is linked yet.
+  useEffect(() => {
+    if (autoOpen && !linkedLoading && !linked) setPickerOpen(true);
+  }, [autoOpen, linkedLoading, linked]);
 
   return (
     <Section title={`GA4 — ${projectName}`} desc="Link a GA4 property to this project and pull the last 30 days.">
