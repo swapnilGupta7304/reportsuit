@@ -143,7 +143,7 @@ function Page() {
   );
 }
 
-function Ga4ProjectSection({ integrationId, projectId, projectName }: { integrationId: string; projectId: string; projectName: string }) {
+function Ga4ProjectSection({ integrationId, projectId, projectName, autoOpen }: { integrationId: string; projectId: string; projectName: string; autoOpen?: boolean }) {
   const qc = useQueryClient();
   const listFn = useServerFn(listGa4Properties);
   const linkFn = useServerFn(linkGa4Property);
