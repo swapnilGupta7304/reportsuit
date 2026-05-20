@@ -33,16 +33,20 @@ function Inner() {
     },
   });
   const rows = data ?? [];
-  const t = rows.reduce((a, m) => ({
-    total: a.total + (m.total_users ?? 0), active: a.active + (m.active_users ?? 0),
-    nu: a.nu + (m.new_users ?? 0), ru: a.ru + (m.returning_users ?? 0),
-    sess: a.sess + (m.sessions ?? 0), ev: a.ev + (m.event_count ?? 0),
-    eng: a.eng + (m.engagement_rate ?? 0), eng_time: a.eng_time + Number(m.avg_engagement_time ?? 0),
-    bounce: a.bounce + Number(m.bounce_rate ?? 0), n: a.n + 1,
-  }), { total: 0, active: 0, nu: 0, ru: 0, sess: 0, ev: 0, eng: 0, eng_time: 0, bounce: 0, n: 0 });
-  const avgEng = t.n ? (t.eng / t.n).toFixed(1) + "%" : "—";
-  const avgTime = t.n ? (t.eng_time / t.n).toFixed(1) + "s" : "—";
-  const avgBounce = t.n ? (t.bounce / t.n).toFixed(1) + "%" : "—";
+  const t = rows.reduce((a, m) => {
+    const s = m.sessions ?? 0;
+    return {
+      total: a.total + (m.total_users ?? 0), active: a.active + (m.active_users ?? 0),
+      nu: a.nu + (m.new_users ?? 0), ru: a.ru + (m.returning_users ?? 0),
+      sess: a.sess + s, ev: a.ev + (m.event_count ?? 0),
+      engSess: a.engSess + s * (Number(m.engagement_rate ?? 0) / 100),
+      engDur: a.engDur + Number(m.avg_engagement_time ?? 0) * s,
+    };
+  }, { total: 0, active: 0, nu: 0, ru: 0, sess: 0, ev: 0, engSess: 0, engDur: 0 });
+  const avgEng = t.sess > 0 ? ((t.engSess / t.sess) * 100).toFixed(1) + "%" : "—";
+  const avgTime = t.sess > 0 ? (t.engDur / t.sess).toFixed(1) + "s" : "—";
+  const avgBounce = t.sess > 0 ? (100 - (t.engSess / t.sess) * 100).toFixed(1) + "%" : "—";
+
 
   return (
     <div className="space-y-8">

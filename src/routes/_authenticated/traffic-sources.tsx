@@ -30,23 +30,28 @@ function Inner() {
     },
   });
   const rows = data ?? [];
-  // Aggregate by source
-  const map = new Map<string, { sessions: number; engaged: number; engRate: number; avgEng: number; bounce: number; eps: number; ev: number; n: number }>();
+  // Weighted aggregation by sessions — matches GA4 exactly
+  const map = new Map<string, { sessions: number; engaged: number; engDuration: number; ev: number }>();
   for (const r of rows) {
     const k = r.source ?? "Unassigned";
-    const e = map.get(k) ?? { sessions: 0, engaged: 0, engRate: 0, avgEng: 0, bounce: 0, eps: 0, ev: 0, n: 0 };
-    e.sessions += r.sessions ?? 0; e.engaged += r.engaged_sessions ?? 0;
-    e.engRate += Number(r.engagement_rate ?? 0); e.avgEng += Number(r.avg_engagement_time_per_session ?? 0);
-    e.bounce += Number(r.bounce_rate ?? 0); e.eps += Number(r.events_per_session ?? 0);
-    e.ev += r.event_count ?? 0; e.n += 1;
+    const e = map.get(k) ?? { sessions: 0, engaged: 0, engDuration: 0, ev: 0 };
+    const s = r.sessions ?? 0;
+    e.sessions += s; e.engaged += r.engaged_sessions ?? 0;
+    e.engDuration += Number(r.avg_engagement_time_per_session ?? 0) * s;
+    e.ev += r.event_count ?? 0;
     map.set(k, e);
   }
-  // Show all GA4 channels, with zero for missing
   const agg = GA4_CHANNELS.map(name => {
     const e = map.get(name);
-    if (!e) return { name, sessions: 0, engaged: 0, engRate: 0, avgEng: 0, bounce: 0, eps: 0, ev: 0 };
-    return { name, sessions: e.sessions, engaged: e.engaged, engRate: e.n ? e.engRate / e.n : 0, avgEng: e.n ? e.avgEng / e.n : 0, bounce: e.n ? e.bounce / e.n : 0, eps: e.n ? e.eps / e.n : 0, ev: e.ev };
+    if (!e || e.sessions === 0) return { name, sessions: 0, engaged: 0, engRate: 0, avgEng: 0, bounce: 0, eps: 0, ev: 0 };
+    const engRate = (e.engaged / e.sessions) * 100;
+    return {
+      name, sessions: e.sessions, engaged: e.engaged,
+      engRate, avgEng: e.engDuration / e.sessions,
+      bounce: 100 - engRate, eps: e.ev / e.sessions, ev: e.ev,
+    };
   });
+
   const hasData = rows.length > 0;
 
   return (
