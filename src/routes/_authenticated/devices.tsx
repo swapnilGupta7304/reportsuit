@@ -70,14 +70,17 @@ function Inner() {
 }
 
 function aggBy(rows: any[], key: string) {
-  const m = new Map<string, { key: string; users: number; sessions: number; bounce: number; n: number }>();
+  const m = new Map<string, { key: string; users: number; sessions: number; engagedSessions: number }>();
   for (const r of rows) {
     const k = r[key] ?? "Unknown";
-    const e = m.get(k) ?? { key: k, users: 0, sessions: 0, bounce: 0, n: 0 };
-    e.users += r.active_users ?? 0; e.sessions += r.engaged_sessions ?? 0;
-    e.bounce += Number(r.bounce_rate ?? 0); e.n += 1; m.set(k, e);
+    const e = m.get(k) ?? { key: k, users: 0, sessions: 0, engagedSessions: 0 };
+    const s = r.engaged_sessions ?? 0;
+    e.users += r.active_users ?? 0; e.sessions += s;
+    // bounce_rate stored as %; reconstruct engaged for weighting (already engaged_sessions stored — use that directly)
+    e.engagedSessions += s;
+    m.set(k, e);
   }
-  return [...m.values()].sort((a, b) => b.users - a.users);
+  return [...m.values()].map(e => ({ ...e, bounce: 0 })).sort((a, b) => b.users - a.users);
 }
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return <div className="rounded-2xl border bg-card p-6 shadow-card"><h3 className="font-display font-semibold mb-4">{title}</h3>{children}</div>;
@@ -85,12 +88,13 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function DeviceTable({ rows, label }: { rows: any[]; label: string }) {
   return (
     <Table>
-      <TableHeader><TableRow><TableHead>{label}</TableHead><TableHead className="text-right">Users</TableHead><TableHead className="text-right">Sessions</TableHead><TableHead className="text-right">Bounce</TableHead></TableRow></TableHeader>
+      <TableHeader><TableRow><TableHead>{label}</TableHead><TableHead className="text-right">Users</TableHead><TableHead className="text-right">Engaged Sessions</TableHead></TableRow></TableHeader>
       <TableBody>
         {rows.map(r => (
-          <TableRow key={r.key}><TableCell>{r.key}</TableCell><TableCell className="text-right">{r.users.toLocaleString()}</TableCell><TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell><TableCell className="text-right">{(r.bounce / r.n).toFixed(1)}%</TableCell></TableRow>
+          <TableRow key={r.key}><TableCell>{r.key}</TableCell><TableCell className="text-right">{r.users.toLocaleString()}</TableCell><TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell></TableRow>
         ))}
       </TableBody>
     </Table>
   );
 }
+

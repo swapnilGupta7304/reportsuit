@@ -30,13 +30,21 @@ function Inner() {
   const rows = data ?? [];
   const map = new Map<string, any>();
   for (const r of rows) {
-    const e = map.get(r.page_path) ?? { page_path: r.page_path, pageviews: 0, sessions: 0, users: 0, bounce: 0, eng: 0, n: 0 };
-    e.pageviews += r.pageviews ?? 0; e.sessions += r.sessions ?? 0;
-    e.users += r.total_users ?? 0; e.bounce += Number(r.bounce_rate ?? 0);
-    e.eng += Number(r.avg_engagement_time ?? 0); e.n += 1;
+    const e = map.get(r.page_path) ?? { page_path: r.page_path, pageviews: 0, sessions: 0, users: 0, engagedSessions: 0, engDuration: 0 };
+    const s = r.sessions ?? 0;
+    e.pageviews += r.pageviews ?? 0; e.sessions += s;
+    e.users += r.total_users ?? 0;
+    // engagement_rate stored as % (0..100). Reconstruct engaged sessions for weighted aggregation.
+    e.engagedSessions += s * (Number(r.engagement_rate ?? 0) / 100);
+    e.engDuration += Number(r.avg_engagement_time ?? 0) * s;
     map.set(r.page_path, e);
   }
-  const agg = [...map.values()].sort((a, b) => b.pageviews - a.pageviews).slice(0, 50);
+  const agg = [...map.values()].map(e => ({
+    ...e,
+    eng: e.sessions > 0 ? e.engDuration / e.sessions : 0,
+    bounce: e.sessions > 0 ? (1 - e.engagedSessions / e.sessions) * 100 : 0,
+  })).sort((a, b) => b.pageviews - a.pageviews).slice(0, 50);
+
 
   return (
     <div className="space-y-6">
@@ -56,10 +64,11 @@ function Inner() {
                   <TableCell className="text-right">{r.pageviews.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{r.users.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{(r.eng / r.n).toFixed(1)}s</TableCell>
-                  <TableCell className="text-right">{(r.bounce / r.n).toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{(r.eng).toFixed(1)}s</TableCell>
+                  <TableCell className="text-right">{(r.bounce).toFixed(1)}%</TableCell>
                 </TableRow>
               ))}
+
             </TableBody>
           </Table>
         </div>

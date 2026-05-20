@@ -28,6 +28,7 @@ import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAppAnalyticsRouteImport } from './routes/_authenticated/app-analytics'
+import { Route as ApiPublicHooksSyncDailyPlayRouteImport } from './routes/api/public/hooks/sync-daily-play'
 import { Route as ApiPublicHooksSyncDailyRouteImport } from './routes/api/public/hooks/sync-daily'
 import { Route as ApiPublicOauthGoogleStartRouteImport } from './routes/api/public/oauth/google/start'
 import { Route as ApiPublicOauthGoogleCallbackRouteImport } from './routes/api/public/oauth/google/callback'
@@ -128,6 +129,12 @@ const AuthenticatedAppAnalyticsRoute =
     path: '/app-analytics',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicHooksSyncDailyPlayRoute =
+  ApiPublicHooksSyncDailyPlayRouteImport.update({
+    id: '/api/public/hooks/sync-daily-play',
+    path: '/api/public/hooks/sync-daily-play',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksSyncDailyRoute = ApiPublicHooksSyncDailyRouteImport.update({
   id: '/api/public/hooks/sync-daily',
   path: '/api/public/hooks/sync-daily',
@@ -166,6 +173,7 @@ export interface FileRoutesByFullPath {
   '/traffic-sources': typeof AuthenticatedTrafficSourcesRoute
   '/website': typeof AuthenticatedWebsiteRoute
   '/api/public/hooks/sync-daily': typeof ApiPublicHooksSyncDailyRoute
+  '/api/public/hooks/sync-daily-play': typeof ApiPublicHooksSyncDailyPlayRoute
   '/api/public/oauth/google/callback': typeof ApiPublicOauthGoogleCallbackRoute
   '/api/public/oauth/google/start': typeof ApiPublicOauthGoogleStartRoute
 }
@@ -189,6 +197,7 @@ export interface FileRoutesByTo {
   '/traffic-sources': typeof AuthenticatedTrafficSourcesRoute
   '/website': typeof AuthenticatedWebsiteRoute
   '/api/public/hooks/sync-daily': typeof ApiPublicHooksSyncDailyRoute
+  '/api/public/hooks/sync-daily-play': typeof ApiPublicHooksSyncDailyPlayRoute
   '/api/public/oauth/google/callback': typeof ApiPublicOauthGoogleCallbackRoute
   '/api/public/oauth/google/start': typeof ApiPublicOauthGoogleStartRoute
 }
@@ -214,6 +223,7 @@ export interface FileRoutesById {
   '/_authenticated/traffic-sources': typeof AuthenticatedTrafficSourcesRoute
   '/_authenticated/website': typeof AuthenticatedWebsiteRoute
   '/api/public/hooks/sync-daily': typeof ApiPublicHooksSyncDailyRoute
+  '/api/public/hooks/sync-daily-play': typeof ApiPublicHooksSyncDailyPlayRoute
   '/api/public/oauth/google/callback': typeof ApiPublicOauthGoogleCallbackRoute
   '/api/public/oauth/google/start': typeof ApiPublicOauthGoogleStartRoute
 }
@@ -239,6 +249,7 @@ export interface FileRouteTypes {
     | '/traffic-sources'
     | '/website'
     | '/api/public/hooks/sync-daily'
+    | '/api/public/hooks/sync-daily-play'
     | '/api/public/oauth/google/callback'
     | '/api/public/oauth/google/start'
   fileRoutesByTo: FileRoutesByTo
@@ -262,6 +273,7 @@ export interface FileRouteTypes {
     | '/traffic-sources'
     | '/website'
     | '/api/public/hooks/sync-daily'
+    | '/api/public/hooks/sync-daily-play'
     | '/api/public/oauth/google/callback'
     | '/api/public/oauth/google/start'
   id:
@@ -286,6 +298,7 @@ export interface FileRouteTypes {
     | '/_authenticated/traffic-sources'
     | '/_authenticated/website'
     | '/api/public/hooks/sync-daily'
+    | '/api/public/hooks/sync-daily-play'
     | '/api/public/oauth/google/callback'
     | '/api/public/oauth/google/start'
   fileRoutesById: FileRoutesById
@@ -298,6 +311,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   ApiPublicHooksSyncDailyRoute: typeof ApiPublicHooksSyncDailyRoute
+  ApiPublicHooksSyncDailyPlayRoute: typeof ApiPublicHooksSyncDailyPlayRoute
   ApiPublicOauthGoogleCallbackRoute: typeof ApiPublicOauthGoogleCallbackRoute
   ApiPublicOauthGoogleStartRoute: typeof ApiPublicOauthGoogleStartRoute
 }
@@ -437,6 +451,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/hooks/sync-daily-play': {
+      id: '/api/public/hooks/sync-daily-play'
+      path: '/api/public/hooks/sync-daily-play'
+      fullPath: '/api/public/hooks/sync-daily-play'
+      preLoaderRoute: typeof ApiPublicHooksSyncDailyPlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/sync-daily': {
       id: '/api/public/hooks/sync-daily'
       path: '/api/public/hooks/sync-daily'
@@ -505,19 +526,10 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   ApiPublicHooksSyncDailyRoute: ApiPublicHooksSyncDailyRoute,
+  ApiPublicHooksSyncDailyPlayRoute: ApiPublicHooksSyncDailyPlayRoute,
   ApiPublicOauthGoogleCallbackRoute: ApiPublicOauthGoogleCallbackRoute,
   ApiPublicOauthGoogleStartRoute: ApiPublicOauthGoogleStartRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
