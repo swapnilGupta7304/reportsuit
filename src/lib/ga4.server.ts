@@ -58,13 +58,46 @@ export async function ga4ListProperties(integrationId: string) {
   return out;
 }
 
-export async function ga4RunReport(integrationId: string, propertyId: string, body: object) {
+export async function ga4GetPropertyMeta(integrationId: string, propertyId: string) {
   const token = await getAccessToken(integrationId);
-  const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const res = await fetch(`https://analyticsadmin.googleapis.com/v1beta/properties/${propertyId}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error(`GA4 runReport failed: ${await res.text()}`);
-  return await res.json() as any;
+  if (!res.ok) throw new Error(`Get GA4 property failed: ${await res.text()}`);
+  const j = await res.json() as { timeZone?: string; currencyCode?: string; displayName?: string };
+  return { timeZone: j.timeZone ?? "UTC", currencyCode: j.currencyCode ?? "USD", displayName: j.displayName };
+}
+
+/**
+ * Paginated runReport. Returns concatenated rows across all pages.
+ * Uses offset/limit to walk results — matches GA4 UI totals exactly.
+ */
+export async function ga4RunReport(integrationId: string, propertyId: string, body: Record<string, any>) {
+  const token = await getAccessToken(integrationId);
+  const pageSize = 100000; // GA4 max
+  let offset = 0;
+  let allRows: any[] = [];
+  let rowCount = 0;
+  let metricHeaders: any[] = [];
+  let dimensionHeaders: any[] = [];
+
+  while (true) {
+    const payload = { ...body, limit: pageSize, offset, keepEmptyRows: false };
+    const res = await fetch(`https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`GA4 runReport failed: ${await res.text()}`);
+    const j = await res.json() as any;
+    metricHeaders = j.metricHeaders ?? metricHeaders;
+    dimensionHeaders = j.dimensionHeaders ?? dimensionHeaders;
+    rowCount = Number(j.rowCount ?? 0);
+    const rows = j.rows ?? [];
+    allRows = allRows.concat(rows);
+    offset += rows.length;
+    if (rows.length < pageSize || offset >= rowCount) break;
+    if (offset > 500000) break; // hard safety
+  }
+  return { rows: allRows, rowCount, metricHeaders, dimensionHeaders };
 }
