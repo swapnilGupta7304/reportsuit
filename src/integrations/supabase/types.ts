@@ -262,27 +262,33 @@ export type Database = {
       ga4_properties: {
         Row: {
           created_at: string
+          currency_code: string | null
           id: string
           integration_id: string
           project_id: string
           property_id: string
           property_name: string | null
+          timezone: string | null
         }
         Insert: {
           created_at?: string
+          currency_code?: string | null
           id?: string
           integration_id: string
           project_id: string
           property_id: string
           property_name?: string | null
+          timezone?: string | null
         }
         Update: {
           created_at?: string
+          currency_code?: string | null
           id?: string
           integration_id?: string
           project_id?: string
           property_id?: string
           property_name?: string | null
+          timezone?: string | null
         }
         Relationships: [
           {
@@ -461,24 +467,30 @@ export type Database = {
         Row: {
           app_name: string | null
           created_at: string
+          developer_account: string | null
           id: string
           integration_id: string
+          last_synced_at: string | null
           package_name: string
           project_id: string
         }
         Insert: {
           app_name?: string | null
           created_at?: string
+          developer_account?: string | null
           id?: string
           integration_id: string
+          last_synced_at?: string | null
           package_name: string
           project_id: string
         }
         Update: {
           app_name?: string | null
           created_at?: string
+          developer_account?: string | null
           id?: string
           integration_id?: string
+          last_synced_at?: string | null
           package_name?: string
           project_id?: string
         }
