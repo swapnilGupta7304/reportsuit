@@ -200,5 +200,3 @@ function agg(rows: any[], keyFn: (r: any) => string) {
 }
 
 void Globe;
-void totalSessions;
-function totalSessions() {}
