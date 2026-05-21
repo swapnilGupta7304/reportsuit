@@ -218,5 +218,3 @@ function DonutCard({
 }
 
 void PALETTE_LIST;
-void gradientId;
-function gradientId() {}
