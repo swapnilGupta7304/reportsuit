@@ -28,47 +28,68 @@ function Inner() {
     },
   });
   const rows = data ?? [];
+  // Aggregate per pagePath across the selected date range.
+  // - Counters (pageviews/users/sessions): summed across days.
+  // - Bounce rate: session-weighted (matches GA4 UI).
+  // - Views per active user: pageviews / activeUsers (matches GA4 screenPageViewsPerUser).
   const map = new Map<string, any>();
   for (const r of rows) {
-    const e = map.get(r.page_path) ?? { page_path: r.page_path, pageviews: 0, sessions: 0, users: 0, engagedSessions: 0, engDuration: 0 };
-    const s = r.sessions ?? 0;
-    e.pageviews += r.pageviews ?? 0; e.sessions += s;
-    e.users += r.total_users ?? 0;
-    // engagement_rate stored as % (0..100). Reconstruct engaged sessions for weighted aggregation.
-    e.engagedSessions += s * (Number(r.engagement_rate ?? 0) / 100);
-    e.engDuration += Number(r.avg_engagement_time ?? 0) * s;
+    const e = map.get(r.page_path) ?? {
+      page_path: r.page_path,
+      pageviews: 0, totalUsers: 0, activeUsers: 0, newUsers: 0,
+      sessions: 0, bounceWeighted: 0,
+    };
+    const s = Number(r.sessions ?? 0);
+    e.pageviews += Number(r.pageviews ?? 0);
+    e.totalUsers += Number(r.total_users ?? 0);
+    e.activeUsers += Number(r.active_users ?? 0);
+    e.newUsers += Number(r.new_users ?? 0);
+    e.sessions += s;
+    e.bounceWeighted += Number(r.bounce_rate ?? 0) * s; // stored as 0..100
     map.set(r.page_path, e);
   }
   const agg = [...map.values()].map(e => ({
-    ...e,
-    eng: e.sessions > 0 ? e.engDuration / e.sessions : 0,
-    bounce: e.sessions > 0 ? (1 - e.engagedSessions / e.sessions) * 100 : 0,
-  })).sort((a, b) => b.pageviews - a.pageviews).slice(0, 50);
-
+    page_path: e.page_path,
+    totalUsers: e.totalUsers,
+    activeUsers: e.activeUsers,
+    newUsers: e.newUsers,
+    returningUsers: Math.max(0, e.totalUsers - e.newUsers),
+    viewsPerActiveUser: e.activeUsers > 0 ? e.pageviews / e.activeUsers : 0,
+    bounceRate: e.sessions > 0 ? e.bounceWeighted / e.sessions : 0,
+    _sort: e.pageviews,
+  })).sort((a, b) => b._sort - a._sort).slice(0, 50);
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Top Pages" />
+      <ModuleHeader title="Top Pages" subtitle="GA4 Pages and screens — exact metric parity" />
       {isLoading ? <Skeleton className="h-96 rounded-2xl" /> : agg.length === 0 ? (
         <EmptyState icon={Plug} title="No page data" description="Connect GA4 to view top pages." actionLabel="Connect GA4" onAction={() => nav({ to: "/settings" })} />
       ) : (
         <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow><TableHead>Page</TableHead><TableHead className="text-right">Views</TableHead><TableHead className="text-right">Sessions</TableHead><TableHead className="text-right">Users</TableHead><TableHead className="text-right">Avg Eng. Time</TableHead><TableHead className="text-right">Bounce Rate</TableHead></TableRow>
+              <TableRow>
+                <TableHead>Page path</TableHead>
+                <TableHead className="text-right">Total Users</TableHead>
+                <TableHead className="text-right">Active Users</TableHead>
+                <TableHead className="text-right">New Users</TableHead>
+                <TableHead className="text-right">Returning Users</TableHead>
+                <TableHead className="text-right">Views / Active User</TableHead>
+                <TableHead className="text-right">Bounce Rate</TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
               {agg.map(r => (
                 <TableRow key={r.page_path}>
                   <TableCell className="font-mono text-xs max-w-md truncate">{r.page_path}</TableCell>
-                  <TableCell className="text-right">{r.pageviews.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{r.users.toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{(r.eng).toFixed(1)}s</TableCell>
-                  <TableCell className="text-right">{(r.bounce).toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{r.totalUsers.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{r.activeUsers.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{r.newUsers.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{r.returningUsers.toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{r.viewsPerActiveUser.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{r.bounceRate.toFixed(2)}%</TableCell>
                 </TableRow>
               ))}
-
             </TableBody>
           </Table>
         </div>
