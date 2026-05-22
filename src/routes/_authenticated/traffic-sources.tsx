@@ -72,37 +72,35 @@ function Inner() {
   });
   const rows = data ?? [];
 
-  // Weighted aggregation by sessions — matches GA4 exactly
+  // Aggregate raw GA4 counts per channel. Rates derived from raw counts ==
+  // GA4 Traffic Acquisition rates exactly (no manual recalculation per row).
   const map = new Map<
     string,
-    { sessions: number; engaged: number; engDuration: number; ev: number }
+    { sessions: number; engaged: number; durationTotal: number; events: number }
   >();
   for (const r of rows) {
-    const k = r.source ?? "Unassigned";
-    const e = map.get(k) ?? { sessions: 0, engaged: 0, engDuration: 0, ev: 0 };
+    const k = (r.source ?? "Unassigned") as string;
+    const e = map.get(k) ?? { sessions: 0, engaged: 0, durationTotal: 0, events: 0 };
     const s = r.sessions ?? 0;
     e.sessions += s;
     e.engaged += r.engaged_sessions ?? 0;
-    e.engDuration += Number(r.avg_engagement_time_per_session ?? 0) * s;
-    e.ev += r.event_count ?? 0;
+    // avg_engagement_time_per_session now stores GA4 averageSessionDuration (seconds)
+    e.durationTotal += Number(r.avg_engagement_time_per_session ?? 0) * s;
+    e.events += r.event_count ?? 0;
     map.set(k, e);
   }
-  const agg = GA4_CHANNELS.map((name) => {
-    const e = map.get(name);
-    if (!e || e.sessions === 0)
-      return { name, sessions: 0, engaged: 0, engRate: 0, avgEng: 0, bounce: 0, eps: 0, ev: 0 };
-    const engRate = (e.engaged / e.sessions) * 100;
-    return {
+  const agg = Array.from(map.entries())
+    .map(([name, e]) => ({
       name,
       sessions: e.sessions,
       engaged: e.engaged,
-      engRate,
-      avgEng: e.engDuration / e.sessions,
-      bounce: 100 - engRate,
-      eps: e.ev / e.sessions,
-      ev: e.ev,
-    };
-  }).filter((r) => r.sessions > 0 || r.name === "Direct" || r.name === "Organic Search");
+      engRate: e.sessions > 0 ? (e.engaged / e.sessions) * 100 : 0,
+      avgEng: e.sessions > 0 ? e.durationTotal / e.sessions : 0,
+      bounce: e.sessions > 0 ? (1 - e.engaged / e.sessions) * 100 : 0,
+      eps: e.sessions > 0 ? e.events / e.sessions : 0,
+      ev: e.events,
+    }))
+    .sort((a, b) => b.sessions - a.sessions);
 
   const totals = agg.reduce(
     (a, r) => {
