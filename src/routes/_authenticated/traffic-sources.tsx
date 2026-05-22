@@ -42,16 +42,6 @@ export const Route = createFileRoute("/_authenticated/traffic-sources")({
   ),
 });
 
-const GA4_CHANNELS = [
-  "Organic Search",
-  "Direct",
-  "Referral",
-  "Organic Social",
-  "Email",
-  "Paid Search",
-  "Organic Video",
-  "Unassigned",
-];
 
 function Inner() {
   const { currentProject } = useCurrentProject();
