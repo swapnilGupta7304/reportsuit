@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { Users, Activity, UserPlus, Repeat, TrendingUp, MousePointer, Clock, Plug } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
@@ -11,6 +12,8 @@ import { ModuleHeader } from "@/components/ModuleHeader";
 import { NoProjectGate } from "@/components/NoProject";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ga4Aggregate } from "@/lib/ga4-live.functions";
+import { readTotal } from "@/lib/ga4-live";
 
 export const Route = createFileRoute("/_authenticated/website")({ component: Page });
 
@@ -21,51 +24,73 @@ function Inner() {
   const { currentProject } = useCurrentProject();
   const { range } = useDateRange();
   const nav = useNavigate();
+  const startDate = format(range.from, "yyyy-MM-dd");
+  const endDate = format(range.to, "yyyy-MM-dd");
+
+  const aggFn = useServerFn(ga4Aggregate);
+  const { data: live, isLoading: liveLoading } = useQuery({
+    queryKey: ["wm_live", currentProject!.id, startDate, endDate],
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: [],
+          metrics: [
+            "totalUsers", "activeUsers", "newUsers",
+            "sessions", "engagedSessions", "engagementRate",
+            "bounceRate", "userEngagementDuration", "averageSessionDuration",
+            "eventCount",
+          ],
+          startDate, endDate,
+        },
+      }),
+  });
+
   const { data, isLoading } = useQuery({
-    queryKey: ["wm", currentProject!.id, range.from, range.to],
+    queryKey: ["wm", currentProject!.id, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await supabase.from("website_metrics").select("*")
         .eq("project_id", currentProject!.id)
-        .gte("metric_date", format(range.from, "yyyy-MM-dd"))
-        .lte("metric_date", format(range.to, "yyyy-MM-dd"))
+        .gte("metric_date", startDate)
+        .lte("metric_date", endDate)
         .order("metric_date");
       if (error) throw error; return data ?? [];
     },
   });
   const rows = data ?? [];
-  const t = rows.reduce((a, m) => {
-    const s = m.sessions ?? 0;
-    return {
-      total: a.total + (m.total_users ?? 0), active: a.active + (m.active_users ?? 0),
-      nu: a.nu + (m.new_users ?? 0), ru: a.ru + (m.returning_users ?? 0),
-      sess: a.sess + s, ev: a.ev + (m.event_count ?? 0),
-      engSess: a.engSess + s * (Number(m.engagement_rate ?? 0) / 100),
-      engDur: a.engDur + Number(m.avg_engagement_time ?? 0) * s,
-    };
-  }, { total: 0, active: 0, nu: 0, ru: 0, sess: 0, ev: 0, engSess: 0, engDur: 0 });
-  const avgEng = t.sess > 0 ? ((t.engSess / t.sess) * 100).toFixed(1) + "%" : "—";
-  const avgTime = t.sess > 0 ? (t.engDur / t.sess).toFixed(1) + "s" : "—";
-  const avgBounce = t.sess > 0 ? (100 - (t.engSess / t.sess) * 100).toFixed(1) + "%" : "—";
 
+  // EXACT GA4 totals (live, no per-day summing)
+  const totalUsers = live ? readTotal(live, "totalUsers") : 0;
+  const activeUsers = live ? readTotal(live, "activeUsers") : 0;
+  const newUsers = live ? readTotal(live, "newUsers") : 0;
+  const returningUsers = Math.max(0, totalUsers - newUsers);
+  const sessions = live ? readTotal(live, "sessions") : 0;
+  const engagedSessions = live ? readTotal(live, "engagedSessions") : 0;
+  const eventCount = live ? readTotal(live, "eventCount") : 0;
+  const engagementRate = sessions > 0 ? (engagedSessions / sessions) * 100 : 0;
+  const bounceRate = 100 - engagementRate;
+  const avgEngTime = live && sessions > 0 ? readTotal(live, "userEngagementDuration") / sessions : 0;
+
+  const loading = isLoading || liveLoading;
 
   return (
     <div className="space-y-8">
-      <ModuleHeader title="Website Analytics" subtitle="GA4 web property" />
-      {isLoading ? (
+      <ModuleHeader title="Website Analytics" subtitle="GA4 web property — exact API values" />
+      {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}</div>
-      ) : rows.length === 0 ? (
+      ) : !live || sessions === 0 && totalUsers === 0 ? (
         <EmptyState icon={Plug} title="No website data synced yet" description="Connect Google Analytics 4 in Settings to populate this module." actionLabel="Go to Settings" onAction={() => nav({ to: "/settings" })} />
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="Total Users" value={t.total.toLocaleString()} icon={Users} />
-            <KpiCard label="Active Users" value={t.active.toLocaleString()} icon={Activity} />
-            <KpiCard label="New Users" value={t.nu.toLocaleString()} icon={UserPlus} />
-            <KpiCard label="Returning" value={t.ru.toLocaleString()} icon={Repeat} />
-            <KpiCard label="Sessions" value={t.sess.toLocaleString()} icon={TrendingUp} />
-            <KpiCard label="Events" value={t.ev.toLocaleString()} icon={MousePointer} />
-            <KpiCard label="Avg Engagement" value={avgEng} hint={avgTime} icon={Clock} />
-            <KpiCard label="Bounce Rate" value={avgBounce} icon={TrendingUp} />
+            <KpiCard label="Total Users" value={totalUsers.toLocaleString()} icon={Users} />
+            <KpiCard label="Active Users" value={activeUsers.toLocaleString()} icon={Activity} />
+            <KpiCard label="New Users" value={newUsers.toLocaleString()} icon={UserPlus} />
+            <KpiCard label="Returning" value={returningUsers.toLocaleString()} icon={Repeat} />
+            <KpiCard label="Sessions" value={sessions.toLocaleString()} icon={TrendingUp} />
+            <KpiCard label="Events" value={eventCount.toLocaleString()} icon={MousePointer} />
+            <KpiCard label="Avg Engagement" value={`${engagementRate.toFixed(1)}%`} hint={`${avgEngTime.toFixed(1)}s`} icon={Clock} />
+            <KpiCard label="Bounce Rate" value={`${bounceRate.toFixed(1)}%`} icon={TrendingUp} />
           </div>
           <div className="grid lg:grid-cols-2 gap-6">
             <ChartCard title="Users over time">
