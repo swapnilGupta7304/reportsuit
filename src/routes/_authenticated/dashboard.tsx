@@ -30,6 +30,7 @@ import {
   Legend,
 } from "recharts";
 import { motion } from "framer-motion";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProject } from "@/hooks/use-current-project";
 import { useDateRange } from "@/hooks/use-date-range";
@@ -37,6 +38,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { format } from "date-fns";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
+import { ga4Aggregate } from "@/lib/ga4-live.functions";
+import { readTotal } from "@/lib/ga4-live";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({ component: Page });
 
