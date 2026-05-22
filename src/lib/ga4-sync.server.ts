@@ -77,29 +77,39 @@ export async function syncProjectGA4(projectId: string) {
   await insertChunked("website_metrics", wmRows);
 
   // ============ traffic_sources ============
-  // GA4: Reports → Acquisition → Traffic acquisition → sessionDefaultChannelGroup
+  // GA4: Reports → Acquisition → Traffic acquisition → sessionPrimaryChannelGroup
+  // Pull raw GA4 metrics directly. No filtering, no manual rate recalculation.
   const ts = await ga4RunReport(integrationId, propertyId, {
     dateRanges: [DATE_RANGE],
-    dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
+    dimensions: [{ name: "date" }, { name: "sessionPrimaryChannelGroup" }],
     metrics: [
-      { name: "sessions" }, { name: "engagedSessions" },
-      { name: "userEngagementDuration" }, { name: "eventCount" },
+      { name: "sessions" },
+      { name: "engagedSessions" },
+      { name: "engagementRate" },
+      { name: "averageSessionDuration" },
+      { name: "bounceRate" },
+      { name: "eventsPerSession" },
+      { name: "eventCount" },
     ],
   });
   const tsRows = ts.rows.map((r: any) => {
     const sessions = N(r.metricValues[0].value);
     const engagedSessions = N(r.metricValues[1].value);
-    const engagementDuration = N(r.metricValues[2].value);
-    const eventCount = N(r.metricValues[3].value);
+    const engagementRate = N(r.metricValues[2].value);       // 0..1
+    const avgSessionDuration = N(r.metricValues[3].value);   // seconds
+    const bounceRate = N(r.metricValues[4].value);           // 0..1
+    const eventsPerSession = N(r.metricValues[5].value);
+    const eventCount = N(r.metricValues[6].value);
     return {
-      project_id: projectId, metric_date: fmt(r.dimensionValues[0].value),
+      project_id: projectId,
+      metric_date: fmt(r.dimensionValues[0].value),
       source: r.dimensionValues[1].value || "Unassigned",
-      sessions, engaged_sessions: engagedSessions,
-      // Store raw rates here too — weighted aggregation done at query time
-      engagement_rate: sessions > 0 ? (engagedSessions / sessions) * 100 : 0,
-      avg_engagement_time_per_session: sessions > 0 ? engagementDuration / sessions : 0,
-      bounce_rate: sessions > 0 ? (1 - engagedSessions / sessions) * 100 : 0,
-      events_per_session: sessions > 0 ? eventCount / sessions : 0,
+      sessions,
+      engaged_sessions: engagedSessions,
+      engagement_rate: engagementRate * 100,
+      avg_engagement_time_per_session: avgSessionDuration,
+      bounce_rate: bounceRate * 100,
+      events_per_session: eventsPerSession,
       event_count: eventCount,
     };
   });
