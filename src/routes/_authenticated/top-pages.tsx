@@ -1,18 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { Plug, FileText, Users, Eye } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  LineChart,
-  Line,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, LineChart, Line,
 } from "recharts";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,15 +16,12 @@ import { NoProjectGate } from "@/components/NoProject";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { PALETTE, PALETTE_LIST, TOOLTIP_STYLE } from "@/lib/chart-palette";
+import { ga4Aggregate } from "@/lib/ga4-live.functions";
+import { readDim, readMetric, readTotal } from "@/lib/ga4-live";
 
 export const Route = createFileRoute("/_authenticated/top-pages")({
   component: () => (
@@ -45,74 +35,81 @@ function Inner() {
   const { currentProject } = useCurrentProject();
   const { range } = useDateRange();
   const nav = useNavigate();
-  const { data, isLoading } = useQuery({
-    queryKey: ["tp", currentProject!.id, range.from, range.to],
+  const startDate = format(range.from, "yyyy-MM-dd");
+  const endDate = format(range.to, "yyyy-MM-dd");
+
+  const aggFn = useServerFn(ga4Aggregate);
+
+  // Live aggregated table (EXACT GA4 Pages & Screens values)
+  const { data: live, isLoading } = useQuery({
+    queryKey: ["tp_live", currentProject!.id, startDate, endDate],
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: ["pagePath"],
+          metrics: [
+            "screenPageViews", "totalUsers", "activeUsers", "newUsers",
+            "screenPageViewsPerUser", "bounceRate", "sessions",
+            "engagementRate", "userEngagementDuration",
+          ],
+          startDate, endDate,
+          orderByMetric: "screenPageViews",
+          limit: 100,
+        },
+      }),
+  });
+
+  // Stored daily rows — only for sparkline trend per page
+  const { data: stored } = useQuery({
+    queryKey: ["tp_trend", currentProject!.id, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("top_pages")
-        .select("*")
+        .select("page_path, metric_date, pageviews")
         .eq("project_id", currentProject!.id)
-        .gte("metric_date", format(range.from, "yyyy-MM-dd"))
-        .lte("metric_date", format(range.to, "yyyy-MM-dd"));
+        .gte("metric_date", startDate)
+        .lte("metric_date", endDate);
       if (error) throw error;
       return data ?? [];
     },
   });
-  const rows = data ?? [];
 
-  // Aggregate per pagePath. Build per-page sparkline trend (by date).
-  const map = new Map<string, any>();
-  const trendMap = new Map<string, Map<string, number>>();
-  for (const r of rows) {
-    const e = map.get(r.page_path) ?? {
-      page_path: r.page_path,
-      pageviews: 0,
-      totalUsers: 0,
-      activeUsers: 0,
-      newUsers: 0,
-      sessions: 0,
-      bounceWeighted: 0,
-    };
-    const s = Number(r.sessions ?? 0);
-    e.pageviews += Number(r.pageviews ?? 0);
-    e.totalUsers += Number(r.total_users ?? 0);
-    e.activeUsers += Number(r.active_users ?? 0);
-    e.newUsers += Number(r.new_users ?? 0);
-    e.sessions += s;
-    e.bounceWeighted += Number(r.bounce_rate ?? 0) * s;
-    map.set(r.page_path, e);
-
-    const t = trendMap.get(r.page_path) ?? new Map<string, number>();
-    t.set(r.metric_date, (t.get(r.metric_date) ?? 0) + Number(r.pageviews ?? 0));
-    trendMap.set(r.page_path, t);
+  const trendMap = new Map<string, { date: string; v: number }[]>();
+  for (const r of stored ?? []) {
+    const arr = trendMap.get(r.page_path) ?? [];
+    arr.push({ date: r.metric_date, v: Number(r.pageviews ?? 0) });
+    trendMap.set(r.page_path, arr);
   }
+  for (const arr of trendMap.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
 
-  const agg = [...map.values()]
-    .map((e) => ({
-      page_path: e.page_path,
-      pageviews: e.pageviews,
-      totalUsers: e.totalUsers,
-      activeUsers: e.activeUsers,
-      newUsers: e.newUsers,
-      returningUsers: Math.max(0, e.totalUsers - e.newUsers),
-      viewsPerActiveUser: e.activeUsers > 0 ? e.pageviews / e.activeUsers : 0,
-      bounceRate: e.sessions > 0 ? e.bounceWeighted / e.sessions : 0,
-      trend: [...(trendMap.get(e.page_path) ?? new Map()).entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, v]) => ({ date, v })),
-    }))
-    .sort((a, b) => b.pageviews - a.pageviews)
-    .slice(0, 50);
+  const agg = (live?.rows ?? []).map((r) => {
+    const page = readDim(live!, r, "pagePath");
+    const pageviews = readMetric(live!, r, "screenPageViews");
+    const totalUsers = readMetric(live!, r, "totalUsers");
+    const activeUsers = readMetric(live!, r, "activeUsers");
+    const newUsers = readMetric(live!, r, "newUsers");
+    const viewsPerActive = readMetric(live!, r, "screenPageViewsPerUser");
+    const bounceRate = readMetric(live!, r, "bounceRate") * 100;
+    return {
+      page_path: page,
+      pageviews,
+      totalUsers,
+      activeUsers,
+      newUsers,
+      returningUsers: Math.max(0, totalUsers - newUsers),
+      viewsPerActiveUser: viewsPerActive,
+      bounceRate,
+      trend: trendMap.get(page) ?? [],
+    };
+  });
 
-  const totals = agg.reduce(
-    (a, e) => ({
-      pageviews: a.pageviews + e.pageviews,
-      totalUsers: a.totalUsers + e.totalUsers,
-      activeUsers: a.activeUsers + e.activeUsers,
-      newUsers: a.newUsers + e.newUsers,
-    }),
-    { pageviews: 0, totalUsers: 0, activeUsers: 0, newUsers: 0 },
-  );
+  const totals = {
+    pageviews: live ? readTotal(live, "screenPageViews") : 0,
+    totalUsers: live ? readTotal(live, "totalUsers") : 0,
+    activeUsers: live ? readTotal(live, "activeUsers") : 0,
+    newUsers: live ? readTotal(live, "newUsers") : 0,
+  };
 
   const top10 = agg.slice(0, 10).map((r) => ({
     ...r,
@@ -121,7 +118,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Top Pages" subtitle="GA4 Pages and screens — exact metric parity" />
+      <ModuleHeader title="Top Pages" subtitle="GA4 Pages and screens — live API values" />
       {isLoading ? (
         <Skeleton className="h-96 rounded-2xl" />
       ) : agg.length === 0 ? (
@@ -180,12 +177,7 @@ function Inner() {
             </ChartCard>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.2 }}
-            className="rounded-2xl border bg-card shadow-card overflow-hidden"
-          >
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }} className="rounded-2xl border bg-card shadow-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -204,10 +196,7 @@ function Inner() {
                   <TableRow key={r.page_path} className="hover:bg-muted/40">
                     <TableCell className="font-mono text-xs max-w-md truncate">
                       <span className="inline-flex items-center gap-2">
-                        <span
-                          className="inline-block size-2 rounded-full"
-                          style={{ background: PALETTE_LIST[i % PALETTE_LIST.length] }}
-                        />
+                        <span className="inline-block size-2 rounded-full" style={{ background: PALETTE_LIST[i % PALETTE_LIST.length] }} />
                         {r.page_path}
                       </span>
                     </TableCell>
@@ -216,14 +205,7 @@ function Inner() {
                         {r.trend.length > 1 ? (
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={r.trend}>
-                              <Line
-                                type="monotone"
-                                dataKey="v"
-                                stroke={PALETTE_LIST[i % PALETTE_LIST.length]}
-                                strokeWidth={2}
-                                dot={false}
-                                isAnimationActive={false}
-                              />
+                              <Line type="monotone" dataKey="v" stroke={PALETTE_LIST[i % PALETTE_LIST.length]} strokeWidth={2} dot={false} isAnimationActive={false} />
                             </LineChart>
                           </ResponsiveContainer>
                         ) : (

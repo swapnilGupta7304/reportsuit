@@ -30,6 +30,7 @@ import {
   Legend,
 } from "recharts";
 import { motion } from "framer-motion";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProject } from "@/hooks/use-current-project";
 import { useDateRange } from "@/hooks/use-date-range";
@@ -37,6 +38,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { format } from "date-fns";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
+import { ga4Aggregate } from "@/lib/ga4-live.functions";
+import { readTotal } from "@/lib/ga4-live";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({ component: Page });
 
@@ -44,6 +47,27 @@ function Page() {
   const { currentProject, projects, isLoading } = useCurrentProject();
   const { range } = useDateRange();
   const nav = useNavigate();
+  const startDate = format(range.from, "yyyy-MM-dd");
+  const endDate = format(range.to, "yyyy-MM-dd");
+
+  const aggFn = useServerFn(ga4Aggregate);
+  const { data: live } = useQuery({
+    queryKey: ["dash_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: [],
+          metrics: [
+            "totalUsers", "activeUsers", "newUsers",
+            "sessions", "engagedSessions", "engagementRate",
+            "bounceRate", "userEngagementDuration", "eventCount",
+          ],
+          startDate, endDate,
+        },
+      }),
+  });
 
   const { data: metrics } = useQuery({
     queryKey: ["website_metrics", currentProject?.id, range.from, range.to],
@@ -53,8 +77,8 @@ function Page() {
         .from("website_metrics")
         .select("*")
         .eq("project_id", currentProject!.id)
-        .gte("metric_date", format(range.from, "yyyy-MM-dd"))
-        .lte("metric_date", format(range.to, "yyyy-MM-dd"))
+        .gte("metric_date", startDate)
+        .lte("metric_date", endDate)
         .order("metric_date");
       if (error) throw error;
       return data ?? [];
@@ -69,8 +93,8 @@ function Page() {
         .from("traffic_sources")
         .select("source, sessions, engaged_sessions")
         .eq("project_id", currentProject!.id)
-        .gte("metric_date", format(range.from, "yyyy-MM-dd"))
-        .lte("metric_date", format(range.to, "yyyy-MM-dd"));
+        .gte("metric_date", startDate)
+        .lte("metric_date", endDate);
       if (error) throw error;
       return data ?? [];
     },
@@ -104,23 +128,25 @@ function Page() {
     engagement: Number(m.engagement_rate ?? 0),
   }));
 
-  const totals = series.reduce(
-    (a, m) => ({
-      users: a.users + m.total_users,
-      active: a.active + m.active_users,
-      newU: a.newU + m.new_users,
-      ret: a.ret + m.returning_users,
-      sessions: a.sessions + m.sessions,
-      events: a.events + m.events,
-      organic: a.organic + m.organic,
-    }),
-    { users: 0, active: 0, newU: 0, ret: 0, sessions: 0, events: 0, organic: 0 },
-  );
+  // EXACT GA4 totals from live aggregate (no per-day summing)
+  const totalUsersLive = live ? readTotal(live, "totalUsers") : 0;
+  const activeUsersLive = live ? readTotal(live, "activeUsers") : 0;
+  const newUsersLive = live ? readTotal(live, "newUsers") : 0;
+  const sessionsLive = live ? readTotal(live, "sessions") : 0;
+  const engagedLive = live ? readTotal(live, "engagedSessions") : 0;
+  const eventsLive = live ? readTotal(live, "eventCount") : 0;
+  const totals = {
+    users: totalUsersLive,
+    active: activeUsersLive,
+    newU: newUsersLive,
+    ret: Math.max(0, totalUsersLive - newUsersLive),
+    sessions: sessionsLive,
+    events: eventsLive,
+    organic: 0,
+  };
 
-  const avgBounce =
-    series.length > 0 ? series.reduce((s, x) => s + x.bounce, 0) / series.length : 0;
-  const avgEng =
-    series.length > 0 ? series.reduce((s, x) => s + x.engagement, 0) / series.length : 0;
+  const avgEng = sessionsLive > 0 ? (engagedLive / sessionsLive) * 100 : 0;
+  const avgBounce = 100 - avgEng;
 
   const sourceMap = new Map<string, number>();
   for (const r of sources ?? []) {

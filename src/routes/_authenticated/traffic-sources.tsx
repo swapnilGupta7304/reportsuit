@@ -1,22 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { format } from "date-fns";
 import { Plug, MousePointer, Users, BarChart3, Activity, Zap } from "lucide-react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-  PieChart,
-  Pie,
-  Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, PieChart, Pie, Legend,
 } from "recharts";
 import { motion } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProject } from "@/hooks/use-current-project";
 import { useDateRange } from "@/hooks/use-date-range";
 import { ModuleHeader } from "@/components/ModuleHeader";
@@ -24,15 +15,12 @@ import { NoProjectGate } from "@/components/NoProject";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
+import { ga4Aggregate } from "@/lib/ga4-live.functions";
+import { readDim, readMetric, readTotal } from "@/lib/ga4-live";
 
 export const Route = createFileRoute("/_authenticated/traffic-sources")({
   component: () => (
@@ -42,76 +30,58 @@ export const Route = createFileRoute("/_authenticated/traffic-sources")({
   ),
 });
 
-
 function Inner() {
   const { currentProject } = useCurrentProject();
   const { range } = useDateRange();
   const nav = useNavigate();
-  const { data, isLoading } = useQuery({
-    queryKey: ["ts", currentProject!.id, range.from, range.to],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("traffic_sources")
-        .select("*")
-        .eq("project_id", currentProject!.id)
-        .gte("metric_date", format(range.from, "yyyy-MM-dd"))
-        .lte("metric_date", format(range.to, "yyyy-MM-dd"));
-      if (error) throw error;
-      return data ?? [];
-    },
+  const startDate = format(range.from, "yyyy-MM-dd");
+  const endDate = format(range.to, "yyyy-MM-dd");
+
+  const aggFn = useServerFn(ga4Aggregate);
+  const { data: live, isLoading } = useQuery({
+    queryKey: ["ts_live", currentProject!.id, startDate, endDate],
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: ["sessionPrimaryChannelGroup"],
+          metrics: [
+            "sessions", "engagedSessions", "engagementRate",
+            "averageSessionDuration", "bounceRate",
+            "eventsPerSession", "eventCount",
+          ],
+          startDate, endDate,
+          orderByMetric: "sessions",
+          limit: 200,
+        },
+      }),
   });
-  const rows = data ?? [];
 
-  // Aggregate raw GA4 counts per channel. Rates derived from raw counts ==
-  // GA4 Traffic Acquisition rates exactly (no manual recalculation per row).
-  const map = new Map<
-    string,
-    { sessions: number; engaged: number; durationTotal: number; events: number }
-  >();
-  for (const r of rows) {
-    const k = (r.source ?? "Unassigned") as string;
-    const e = map.get(k) ?? { sessions: 0, engaged: 0, durationTotal: 0, events: 0 };
-    const s = r.sessions ?? 0;
-    e.sessions += s;
-    e.engaged += r.engaged_sessions ?? 0;
-    // avg_engagement_time_per_session now stores GA4 averageSessionDuration (seconds)
-    e.durationTotal += Number(r.avg_engagement_time_per_session ?? 0) * s;
-    e.events += r.event_count ?? 0;
-    map.set(k, e);
-  }
-  const agg = Array.from(map.entries())
-    .map(([name, e]) => ({
-      name,
-      sessions: e.sessions,
-      engaged: e.engaged,
-      engRate: e.sessions > 0 ? (e.engaged / e.sessions) * 100 : 0,
-      avgEng: e.sessions > 0 ? e.durationTotal / e.sessions : 0,
-      bounce: e.sessions > 0 ? (1 - e.engaged / e.sessions) * 100 : 0,
-      eps: e.sessions > 0 ? e.events / e.sessions : 0,
-      ev: e.events,
-    }))
-    .sort((a, b) => b.sessions - a.sessions);
+  const agg = (live?.rows ?? []).map((r, i) => {
+    const name = readDim(live!, r, "sessionPrimaryChannelGroup") || "Unassigned";
+    const sessions = readMetric(live!, r, "sessions");
+    const engaged = readMetric(live!, r, "engagedSessions");
+    const engRate = readMetric(live!, r, "engagementRate") * 100;
+    const avgEng = readMetric(live!, r, "averageSessionDuration");
+    const bounce = readMetric(live!, r, "bounceRate") * 100;
+    const eps = readMetric(live!, r, "eventsPerSession");
+    const ev = readMetric(live!, r, "eventCount");
+    return { idx: i, name, sessions, engaged, engRate, avgEng, bounce, eps, ev };
+  });
 
-  const totals = agg.reduce(
-    (a, r) => {
-      a.sessions += r.sessions;
-      a.engaged += r.engaged;
-      a.events += r.ev;
-      return a;
-    },
-    { sessions: 0, engaged: 0, events: 0 },
-  );
-  const avgEng = totals.sessions ? (totals.engaged / totals.sessions) * 100 : 0;
+  const totSessions = live ? readTotal(live, "sessions") : 0;
+  const totEngaged = live ? readTotal(live, "engagedSessions") : 0;
+  const totEvents = live ? readTotal(live, "eventCount") : 0;
+  const avgEng = totSessions > 0 ? (totEngaged / totSessions) * 100 : 0;
   const avgBounce = 100 - avgEng;
-  const avgEps = totals.sessions ? totals.events / totals.sessions : 0;
+  const avgEps = totSessions > 0 ? totEvents / totSessions : 0;
 
   const donut = agg.filter((r) => r.sessions > 0);
-
-  const hasData = rows.length > 0;
+  const hasData = agg.length > 0;
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Traffic Sources" subtitle="GA4 sessionPrimaryChannelGroup — raw API values" />
+      <ModuleHeader title="Traffic Sources" subtitle="GA4 sessionPrimaryChannelGroup — live API values" />
       {isLoading ? (
         <Skeleton className="h-96 rounded-2xl" />
       ) : !hasData ? (
@@ -125,78 +95,26 @@ function Inner() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <GradientKpi
-              label="Sessions"
-              value={totals.sessions.toLocaleString()}
-              from={PALETTE.orange}
-              to="#ffb347"
-              delay={0}
-            />
-            <GradientKpi
-              label="Engagement Rate"
-              value={`${avgEng.toFixed(1)}%`}
-              from={PALETTE.green}
-              to="#4ade80"
-              delay={0.05}
-            />
-            <GradientKpi
-              label="Bounce Rate"
-              value={`${avgBounce.toFixed(1)}%`}
-              from={PALETTE.pink}
-              to="#f472b6"
-              delay={0.1}
-            />
-            <GradientKpi
-              label="Events / Session"
-              value={avgEps.toFixed(2)}
-              hint={`${totals.events.toLocaleString()} events`}
-              from={PALETTE.purple}
-              to={PALETTE.blue}
-              delay={0.15}
-            />
+            <GradientKpi label="Sessions" value={totSessions.toLocaleString()} from={PALETTE.orange} to="#ffb347" delay={0} />
+            <GradientKpi label="Engagement Rate" value={`${avgEng.toFixed(1)}%`} from={PALETTE.green} to="#4ade80" delay={0.05} />
+            <GradientKpi label="Bounce Rate" value={`${avgBounce.toFixed(1)}%`} from={PALETTE.pink} to="#f472b6" delay={0.1} />
+            <GradientKpi label="Events / Session" value={avgEps.toFixed(2)} hint={`${totEvents.toLocaleString()} events`} from={PALETTE.purple} to={PALETTE.blue} delay={0.15} />
           </div>
 
           <div className="grid lg:grid-cols-3 gap-6">
-            <ChartCard
-              title="Sessions by channel"
-              subtitle="Multi-color distribution"
-              className="lg:col-span-2"
-              delay={0.1}
-            >
+            <ChartCard title="Sessions by channel" subtitle="Multi-color distribution" className="lg:col-span-2" delay={0.1}>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={agg} margin={{ left: -10, right: 10 }}>
                   <defs>
                     {agg.map((r, i) => (
-                      <linearGradient
-                        key={r.name}
-                        id={`ts-bar-${i}`}
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor={colorFor(r.name, CHANNEL_COLORS, i)}
-                          stopOpacity={0.95}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor={colorFor(r.name, CHANNEL_COLORS, i)}
-                          stopOpacity={0.55}
-                        />
+                      <linearGradient key={r.name} id={`ts-bar-${i}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={colorFor(r.name, CHANNEL_COLORS, i)} stopOpacity={0.95} />
+                        <stop offset="100%" stopColor={colorFor(r.name, CHANNEL_COLORS, i)} stopOpacity={0.55} />
                       </linearGradient>
                     ))}
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11 }}
-                    interval={0}
-                    angle={-15}
-                    textAnchor="end"
-                    height={60}
-                  />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "hsl(var(--muted))", opacity: 0.3 }} />
                   <Bar dataKey="sessions" radius={[8, 8, 0, 0]} animationDuration={800}>
@@ -211,22 +129,9 @@ function Inner() {
             <ChartCard title="Source distribution" subtitle="Share of total sessions" delay={0.15}>
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
-                  <Pie
-                    data={donut}
-                    dataKey="sessions"
-                    nameKey="name"
-                    innerRadius={55}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    animationDuration={900}
-                  >
+                  <Pie data={donut} dataKey="sessions" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2} animationDuration={900}>
                     {donut.map((r, i) => (
-                      <Cell
-                        key={r.name}
-                        fill={colorFor(r.name, CHANNEL_COLORS, i)}
-                        stroke="hsl(var(--background))"
-                        strokeWidth={2}
-                      />
+                      <Cell key={r.name} fill={colorFor(r.name, CHANNEL_COLORS, i)} stroke="hsl(var(--background))" strokeWidth={2} />
                     ))}
                   </Pie>
                   <Tooltip contentStyle={TOOLTIP_STYLE} />
@@ -270,12 +175,7 @@ function Inner() {
             </ChartCard>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-            className="rounded-2xl border bg-card shadow-card overflow-hidden"
-          >
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="rounded-2xl border bg-card shadow-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -283,7 +183,7 @@ function Inner() {
                   <TableHead className="text-right">Sessions</TableHead>
                   <TableHead className="text-right">Engaged Sessions</TableHead>
                   <TableHead className="text-right">Engagement Rate</TableHead>
-                  <TableHead className="text-right">Avg Eng. Time / Session</TableHead>
+                  <TableHead className="text-right">Avg Session Duration</TableHead>
                   <TableHead className="text-right">Bounce Rate</TableHead>
                   <TableHead className="text-right">Events / Session</TableHead>
                   <TableHead className="text-right">Event Count</TableHead>
@@ -294,10 +194,7 @@ function Inner() {
                   <TableRow key={r.name} className="hover:bg-muted/40">
                     <TableCell className="font-medium">
                       <span className="inline-flex items-center gap-2">
-                        <span
-                          className="inline-block size-2.5 rounded-full"
-                          style={{ background: colorFor(r.name, CHANNEL_COLORS, i) }}
-                        />
+                        <span className="inline-block size-2.5 rounded-full" style={{ background: colorFor(r.name, CHANNEL_COLORS, i) }} />
                         {r.name}
                       </span>
                     </TableCell>
@@ -319,7 +216,6 @@ function Inner() {
   );
 }
 
-// Silence unused imports tree-shaken in some builds
 void Users;
 void BarChart3;
 void Activity;

@@ -101,3 +101,32 @@ export async function ga4RunReport(integrationId: string, propertyId: string, bo
   }
   return { rows: allRows, rowCount, metricHeaders, dimensionHeaders };
 }
+
+/**
+ * Single-page runReport that also returns metricAggregations (TOTAL/MIN/MAX).
+ * Use this for aggregate queries (no `date` dimension) — values match GA4 UI exactly.
+ */
+export async function ga4RunReportSingle(
+  integrationId: string,
+  propertyId: string,
+  body: Record<string, any>,
+) {
+  const token = await getAccessToken(integrationId);
+  const res = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ keepEmptyRows: false, ...body }),
+    },
+  );
+  if (!res.ok) throw new Error(`GA4 runReport failed: ${await res.text()}`);
+  const j = (await res.json()) as any;
+  return {
+    rows: j.rows ?? [],
+    totals: j.totals ?? [],
+    rowCount: Number(j.rowCount ?? 0),
+    metricHeaders: j.metricHeaders ?? [],
+    dimensionHeaders: j.dimensionHeaders ?? [],
+  };
+}
