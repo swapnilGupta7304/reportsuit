@@ -111,7 +111,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Traffic Sources" subtitle="GA4 default channel grouping" />
+      <ModuleHeader title="Traffic Sources" subtitle="GA4 sessionPrimaryChannelGroup — raw API values" />
       {isLoading ? (
         <Skeleton className="h-96 rounded-2xl" />
       ) : !hasData ? (
