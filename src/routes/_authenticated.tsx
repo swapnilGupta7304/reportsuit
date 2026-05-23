@@ -26,8 +26,8 @@ export const Route = createFileRoute("/_authenticated")({
 const nav = [
   { to: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard },
   { to: "/website", label: "Website Analytics", icon: Globe },
-  { to: "/traffic-sources", label: "Traffic Sources", icon: BarChart3 },
-  { to: "/top-pages", label: "Top Pages", icon: FileText },
+  { to: "/traffic-sources", label: "Traffic Intelligence", icon: BarChart3 },
+  { to: "/top-pages", label: "Content Intelligence", icon: FileText },
   { to: "/devices", label: "Devices", icon: MonitorSmartphone },
   { to: "/geography", label: "Geography", icon: MapPin },
   { to: "/events", label: "Top Events", icon: MousePointerClick },

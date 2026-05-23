@@ -11,6 +11,10 @@ import {
   FolderKanban,
   Plug,
   Radio,
+  Award,
+  Globe2,
+  Sparkles,
+  Target,
 } from "lucide-react";
 import {
   AreaChart,
@@ -31,15 +35,20 @@ import {
 } from "recharts";
 import { motion } from "framer-motion";
 import { useServerFn } from "@tanstack/react-start";
+import { format, differenceInCalendarDays, subDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProject } from "@/hooks/use-current-project";
 import { useDateRange } from "@/hooks/use-date-range";
 import { EmptyState } from "@/components/EmptyState";
-import { format } from "date-fns";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
-import { readTotal } from "@/lib/ga4-live";
+import { readTotal, readDim, readMetric } from "@/lib/ga4-live";
+import { compare, executiveSummary, buildAlerts, qualityScore } from "@/lib/intelligence";
+import { ExecutiveSummary } from "@/components/intelligence/ExecutiveSummary";
+import { SmartAlerts } from "@/components/intelligence/SmartAlerts";
+import { SmartInsightCard } from "@/components/intelligence/SmartInsightCard";
+import { QualityBadge } from "@/components/intelligence/QualityBadge";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({ component: Page });
 
@@ -50,7 +59,20 @@ function Page() {
   const startDate = format(range.from, "yyyy-MM-dd");
   const endDate = format(range.to, "yyyy-MM-dd");
 
+  // Previous-period date range (same length, immediately before)
+  const days = Math.max(1, differenceInCalendarDays(range.to, range.from) + 1);
+  const prevEnd = subDays(range.from, 1);
+  const prevStart = subDays(prevEnd, days - 1);
+  const prevStartDate = format(prevStart, "yyyy-MM-dd");
+  const prevEndDate = format(prevEnd, "yyyy-MM-dd");
+
   const aggFn = useServerFn(ga4Aggregate);
+  const totalsMetrics = [
+    "totalUsers", "activeUsers", "newUsers",
+    "sessions", "engagedSessions", "engagementRate",
+    "bounceRate", "userEngagementDuration", "eventCount",
+  ];
+
   const { data: live } = useQuery({
     queryKey: ["dash_live", currentProject?.id, startDate, endDate],
     enabled: !!currentProject,
@@ -59,15 +81,82 @@ function Page() {
         data: {
           projectId: currentProject!.id,
           dimensions: [],
-          metrics: [
-            "totalUsers", "activeUsers", "newUsers",
-            "sessions", "engagedSessions", "engagementRate",
-            "bounceRate", "userEngagementDuration", "eventCount",
-          ],
+          metrics: totalsMetrics,
           startDate, endDate,
         },
       }),
   });
+
+  const { data: prev } = useQuery({
+    queryKey: ["dash_prev", currentProject?.id, prevStartDate, prevEndDate],
+    enabled: !!currentProject,
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: [],
+          metrics: totalsMetrics,
+          startDate: prevStartDate, endDate: prevEndDate,
+        },
+      }),
+  });
+
+  const { data: channelsLive } = useQuery({
+    queryKey: ["dash_ch_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["sessionPrimaryChannelGroup"],
+      metrics: ["sessions", "engagedSessions", "engagementRate", "bounceRate", "averageSessionDuration", "eventsPerSession"],
+      startDate, endDate, orderByMetric: "sessions", limit: 50,
+    }}),
+  });
+
+  const { data: channelsPrev } = useQuery({
+    queryKey: ["dash_ch_prev", currentProject?.id, prevStartDate, prevEndDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["sessionPrimaryChannelGroup"],
+      metrics: ["sessions"],
+      startDate: prevStartDate, endDate: prevEndDate, orderByMetric: "sessions", limit: 50,
+    }}),
+  });
+
+  const { data: countriesLive } = useQuery({
+    queryKey: ["dash_geo_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["country"],
+      metrics: ["sessions"],
+      startDate, endDate, orderByMetric: "sessions", limit: 10,
+    }}),
+  });
+
+  const { data: devicesLive } = useQuery({
+    queryKey: ["dash_dev_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["deviceCategory"],
+      metrics: ["sessions", "totalUsers"],
+      startDate, endDate, orderByMetric: "sessions", limit: 10,
+    }}),
+  });
+
+  const { data: topPagesLive } = useQuery({
+    queryKey: ["dash_pages_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["pagePath"],
+      metrics: ["screenPageViews", "activeUsers", "bounceRate", "userEngagementDuration"],
+      startDate, endDate, orderByMetric: "screenPageViews", limit: 25,
+    }}),
+  });
+
+
 
   const { data: metrics } = useQuery({
     queryKey: ["website_metrics", currentProject?.id, range.from, range.to],
@@ -147,6 +236,88 @@ function Page() {
 
   const avgEng = sessionsLive > 0 ? (engagedLive / sessionsLive) * 100 : 0;
   const avgBounce = 100 - avgEng;
+  const avgDurSec = sessionsLive > 0 ? (live ? readTotal(live, "userEngagementDuration") : 0) / sessionsLive : 0;
+  const eps = sessionsLive > 0 ? eventsLive / sessionsLive : 0;
+
+  // Previous-period totals
+  const pTotal = prev ? readTotal(prev, "totalUsers") : 0;
+  const pActive = prev ? readTotal(prev, "activeUsers") : 0;
+  const pNew = prev ? readTotal(prev, "newUsers") : 0;
+  const pSessions = prev ? readTotal(prev, "sessions") : 0;
+  const pEngaged = prev ? readTotal(prev, "engagedSessions") : 0;
+  const pEngRate = pSessions > 0 ? (pEngaged / pSessions) * 100 : 0;
+  const pBounce = pSessions > 0 ? 100 - pEngRate : 0;
+
+  const dTotal = compare(totalUsersLive, pTotal);
+  const dActive = compare(activeUsersLive, pActive);
+  const dNew = compare(newUsersLive, pNew);
+  const dSessions = compare(sessionsLive, pSessions);
+  const dEng = compare(avgEng, pEngRate);
+  const dBounce = compare(avgBounce, pBounce, true);
+
+  // Channel rows + previous-period channel comparison
+  const channelRows = (channelsLive?.rows ?? []).map((r) => ({
+    name: readDim(channelsLive!, r, "sessionPrimaryChannelGroup") || "Unassigned",
+    sessions: readMetric(channelsLive!, r, "sessions"),
+    engRate: readMetric(channelsLive!, r, "engagementRate") * 100,
+    bounce: readMetric(channelsLive!, r, "bounceRate") * 100,
+    avgDur: readMetric(channelsLive!, r, "averageSessionDuration"),
+    eps: readMetric(channelsLive!, r, "eventsPerSession"),
+  }));
+  const prevChannelMap = new Map<string, number>();
+  for (const r of channelsPrev?.rows ?? []) {
+    prevChannelMap.set(readDim(channelsPrev!, r, "sessionPrimaryChannelGroup") || "Unassigned", readMetric(channelsPrev!, r, "sessions"));
+  }
+  const channelDeltas = channelRows.map((c) => ({ name: c.name, sessions: compare(c.sessions, prevChannelMap.get(c.name) ?? 0) }));
+
+  const topChannel = channelRows[0];
+  const topChannelShare = sessionsLive > 0 && topChannel ? topChannel.sessions / sessionsLive : 0;
+  const topChannelQuality = topChannel ? qualityScore({
+    engagementRate: topChannel.engRate, bounceRate: topChannel.bounce,
+    avgEngagementSec: topChannel.avgDur, eventsPerSession: topChannel.eps,
+  }) : null;
+
+  const topCountryRow = countriesLive?.rows?.[0];
+  const topCountry = topCountryRow ? {
+    name: readDim(countriesLive!, topCountryRow, "country") || "Unknown",
+    sessions: readMetric(countriesLive!, topCountryRow, "sessions"),
+  } : undefined;
+
+  const deviceTotalSessions = (devicesLive?.rows ?? []).reduce((s, r) => s + readMetric(devicesLive!, r, "sessions"), 0);
+  const topDeviceRow = devicesLive?.rows?.[0];
+  const topDevice = topDeviceRow && deviceTotalSessions > 0 ? {
+    name: readDim(devicesLive!, topDeviceRow, "deviceCategory") || "unknown",
+    share: readMetric(devicesLive!, topDeviceRow, "sessions") / deviceTotalSessions,
+  } : undefined;
+
+  // Best performing page (highest engagement, ≥1% of traffic share)
+  const pageRows = (topPagesLive?.rows ?? []).map((r) => {
+    const dur = readMetric(topPagesLive!, r, "userEngagementDuration");
+    const au = readMetric(topPagesLive!, r, "activeUsers");
+    return {
+      path: readDim(topPagesLive!, r, "pagePath"),
+      pv: readMetric(topPagesLive!, r, "screenPageViews"),
+      au,
+      bounce: readMetric(topPagesLive!, r, "bounceRate") * 100,
+      engPerUser: au > 0 ? dur / au : 0,
+    };
+  });
+  const maxAU = Math.max(1, ...pageRows.map((p) => p.au));
+  const bestPage = [...pageRows].sort((a, b) => b.engPerUser - a.engPerUser).find((p) => p.au / maxAU >= 0.05);
+  const worstPage = [...pageRows].sort((a, b) => b.bounce - a.bounce).find((p) => p.au / maxAU >= 0.05);
+
+  // Executive narrative + alerts
+  const summary = executiveSummary({
+    totalUsers: dTotal, sessions: dSessions, newUsers: dNew,
+    engagementRate: dEng, bounceRate: dBounce,
+    topChannel: topChannel ? { name: topChannel.name, share: topChannelShare } : undefined,
+    topCountry, topDevice,
+  });
+  const alerts = buildAlerts({
+    totalUsers: dTotal, sessions: dSessions, newUsers: dNew,
+    engagementRate: dEng, bounceRate: dBounce,
+    channels: channelDeltas,
+  });
 
   const sourceMap = new Map<string, number>();
   for (const r of sources ?? []) {
@@ -157,7 +328,9 @@ function Page() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 7);
 
-  const hasData = series.length > 0;
+  const hasData = sessionsLive > 0 || series.length > 0;
+  void Award;
+
 
   return (
     <div className="space-y-8">
@@ -182,6 +355,92 @@ function Page() {
           Live sync
         </div>
       </motion.div>
+
+      {/* ─── Executive Summary ─── */}
+      <ExecutiveSummary bullets={summary} />
+
+      {/* ─── Traffic Quality Index (custom KPI) ─── */}
+      {topChannel && topChannelQuality && (
+        <div className="rounded-2xl border bg-gradient-to-br from-card to-primary-soft/20 p-5 shadow-card flex flex-wrap items-center gap-4">
+          <div className="size-10 rounded-xl gradient-primary text-primary-foreground grid place-items-center">
+            <Award className="size-5" />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traffic Quality Index</div>
+            <div className="font-display text-2xl font-bold mt-0.5">
+              {qualityScore({ engagementRate: avgEng, bounceRate: avgBounce, avgEngagementSec: avgDurSec, eventsPerSession: eps }).score}
+              <span className="text-base font-normal text-muted-foreground"> / 100</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">Weighted: engagement, bounce, duration, events/session</div>
+          </div>
+          <QualityBadge q={qualityScore({ engagementRate: avgEng, bounceRate: avgBounce, avgEngagementSec: avgDurSec, eventsPerSession: eps })} />
+          <div className="hidden md:block h-10 w-px bg-border" />
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Top channel</div>
+            <div className="text-sm font-semibold">{topChannel.name} · {(topChannelShare * 100).toFixed(0)}%</div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Smart Insight Cards ─── */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {topChannel && (
+          <SmartInsightCard
+            icon={Target}
+            accent={PALETTE.orange}
+            label="Highest performing channel"
+            headline={topChannel.name}
+            detail={`${topChannel.sessions.toLocaleString()} sessions (${(topChannelShare * 100).toFixed(0)}% share) · ${topChannel.engRate.toFixed(0)}% engagement`}
+            pct={channelDeltas.find((c) => c.name === topChannel.name)?.sessions.pct}
+            recommendation="Sustain investment and expand creative variants on this channel."
+            delay={0}
+          />
+        )}
+        {topCountry && (
+          <SmartInsightCard
+            icon={Globe2}
+            accent={PALETTE.blue}
+            label="Fastest growing geography"
+            headline={topCountry.name}
+            detail={`${topCountry.sessions.toLocaleString()} sessions from this market in the selected period.`}
+            recommendation="Localize content and consider geo-targeted campaigns."
+            delay={0.05}
+          />
+        )}
+        {bestPage && (
+          <SmartInsightCard
+            icon={Sparkles}
+            accent={PALETTE.purple}
+            label="Most engaging page"
+            headline={bestPage.path}
+            detail={`${bestPage.engPerUser.toFixed(0)}s avg engagement per user · ${bestPage.au.toLocaleString()} active users.`}
+            recommendation="Mirror this page's structure on lower-performing pages."
+            delay={0.1}
+          />
+        )}
+        {worstPage && worstPage.bounce > 60 && (
+          <SmartInsightCard
+            icon={Activity}
+            accent={PALETTE.pink}
+            label="Highest bounce page"
+            headline={worstPage.path}
+            detail={`${worstPage.bounce.toFixed(0)}% bounce rate — visitors leaving without engaging.`}
+            recommendation="Audit page speed, intent match, and primary CTA."
+            delay={0.15}
+          />
+        )}
+      </div>
+
+      {/* ─── Smart Alerts ─── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display font-semibold text-lg">Smart Alerts</h2>
+          <span className="text-xs text-muted-foreground">vs previous {days} days</span>
+        </div>
+        <SmartAlerts alerts={alerts} />
+      </section>
+
+
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <GradientKpi label="Total Users" value={totals.users.toLocaleString()} from={PALETTE.orange} to="#ffb347" delay={0} />
