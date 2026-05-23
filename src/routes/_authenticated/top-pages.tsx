@@ -120,7 +120,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Top Pages" subtitle="GA4 Pages and screens — live API values" />
+      <ModuleHeader title="Content Intelligence" subtitle="Page performance, content health and SEO opportunity" />
       {isLoading ? (
         <Skeleton className="h-96 rounded-2xl" />
       ) : agg.length === 0 ? (
