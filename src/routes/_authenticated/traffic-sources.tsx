@@ -81,7 +81,7 @@ function Inner() {
 
   return (
     <div className="space-y-6">
-      <ModuleHeader title="Traffic Sources" subtitle="GA4 sessionPrimaryChannelGroup — live API values" />
+      <ModuleHeader title="Traffic Intelligence" subtitle="Channel quality, contribution and acquisition health" />
       {isLoading ? (
         <Skeleton className="h-96 rounded-2xl" />
       ) : !hasData ? (
