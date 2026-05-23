@@ -236,6 +236,88 @@ function Page() {
 
   const avgEng = sessionsLive > 0 ? (engagedLive / sessionsLive) * 100 : 0;
   const avgBounce = 100 - avgEng;
+  const avgDurSec = sessionsLive > 0 ? (live ? readTotal(live, "userEngagementDuration") : 0) / sessionsLive : 0;
+  const eps = sessionsLive > 0 ? eventsLive / sessionsLive : 0;
+
+  // Previous-period totals
+  const pTotal = prev ? readTotal(prev, "totalUsers") : 0;
+  const pActive = prev ? readTotal(prev, "activeUsers") : 0;
+  const pNew = prev ? readTotal(prev, "newUsers") : 0;
+  const pSessions = prev ? readTotal(prev, "sessions") : 0;
+  const pEngaged = prev ? readTotal(prev, "engagedSessions") : 0;
+  const pEngRate = pSessions > 0 ? (pEngaged / pSessions) * 100 : 0;
+  const pBounce = pSessions > 0 ? 100 - pEngRate : 0;
+
+  const dTotal = compare(totalUsersLive, pTotal);
+  const dActive = compare(activeUsersLive, pActive);
+  const dNew = compare(newUsersLive, pNew);
+  const dSessions = compare(sessionsLive, pSessions);
+  const dEng = compare(avgEng, pEngRate);
+  const dBounce = compare(avgBounce, pBounce, true);
+
+  // Channel rows + previous-period channel comparison
+  const channelRows = (channelsLive?.rows ?? []).map((r) => ({
+    name: readDim(channelsLive!, r, "sessionPrimaryChannelGroup") || "Unassigned",
+    sessions: readMetric(channelsLive!, r, "sessions"),
+    engRate: readMetric(channelsLive!, r, "engagementRate") * 100,
+    bounce: readMetric(channelsLive!, r, "bounceRate") * 100,
+    avgDur: readMetric(channelsLive!, r, "averageSessionDuration"),
+    eps: readMetric(channelsLive!, r, "eventsPerSession"),
+  }));
+  const prevChannelMap = new Map<string, number>();
+  for (const r of channelsPrev?.rows ?? []) {
+    prevChannelMap.set(readDim(channelsPrev!, r, "sessionPrimaryChannelGroup") || "Unassigned", readMetric(channelsPrev!, r, "sessions"));
+  }
+  const channelDeltas = channelRows.map((c) => ({ name: c.name, sessions: compare(c.sessions, prevChannelMap.get(c.name) ?? 0) }));
+
+  const topChannel = channelRows[0];
+  const topChannelShare = sessionsLive > 0 && topChannel ? topChannel.sessions / sessionsLive : 0;
+  const topChannelQuality = topChannel ? qualityScore({
+    engagementRate: topChannel.engRate, bounceRate: topChannel.bounce,
+    avgEngagementSec: topChannel.avgDur, eventsPerSession: topChannel.eps,
+  }) : null;
+
+  const topCountryRow = countriesLive?.rows?.[0];
+  const topCountry = topCountryRow ? {
+    name: readDim(countriesLive!, topCountryRow, "country") || "Unknown",
+    sessions: readMetric(countriesLive!, topCountryRow, "sessions"),
+  } : undefined;
+
+  const deviceTotalSessions = (devicesLive?.rows ?? []).reduce((s, r) => s + readMetric(devicesLive!, r, "sessions"), 0);
+  const topDeviceRow = devicesLive?.rows?.[0];
+  const topDevice = topDeviceRow && deviceTotalSessions > 0 ? {
+    name: readDim(devicesLive!, topDeviceRow, "deviceCategory") || "unknown",
+    share: readMetric(devicesLive!, topDeviceRow, "sessions") / deviceTotalSessions,
+  } : undefined;
+
+  // Best performing page (highest engagement, ≥1% of traffic share)
+  const pageRows = (topPagesLive?.rows ?? []).map((r) => {
+    const dur = readMetric(topPagesLive!, r, "userEngagementDuration");
+    const au = readMetric(topPagesLive!, r, "activeUsers");
+    return {
+      path: readDim(topPagesLive!, r, "pagePath"),
+      pv: readMetric(topPagesLive!, r, "screenPageViews"),
+      au,
+      bounce: readMetric(topPagesLive!, r, "bounceRate") * 100,
+      engPerUser: au > 0 ? dur / au : 0,
+    };
+  });
+  const maxAU = Math.max(1, ...pageRows.map((p) => p.au));
+  const bestPage = [...pageRows].sort((a, b) => b.engPerUser - a.engPerUser).find((p) => p.au / maxAU >= 0.05);
+  const worstPage = [...pageRows].sort((a, b) => b.bounce - a.bounce).find((p) => p.au / maxAU >= 0.05);
+
+  // Executive narrative + alerts
+  const summary = executiveSummary({
+    totalUsers: dTotal, sessions: dSessions, newUsers: dNew,
+    engagementRate: dEng, bounceRate: dBounce,
+    topChannel: topChannel ? { name: topChannel.name, share: topChannelShare } : undefined,
+    topCountry, topDevice,
+  });
+  const alerts = buildAlerts({
+    totalUsers: dTotal, sessions: dSessions, newUsers: dNew,
+    engagementRate: dEng, bounceRate: dBounce,
+    channels: channelDeltas,
+  });
 
   const sourceMap = new Map<string, number>();
   for (const r of sources ?? []) {
@@ -246,7 +328,9 @@ function Page() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 7);
 
-  const hasData = series.length > 0;
+  const hasData = sessionsLive > 0 || series.length > 0;
+  void Award;
+
 
   return (
     <div className="space-y-8">
