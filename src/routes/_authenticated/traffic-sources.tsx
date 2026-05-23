@@ -21,6 +21,8 @@ import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
 import { readDim, readMetric, readTotal } from "@/lib/ga4-live";
+import { qualityScore } from "@/lib/intelligence";
+import { QualityBadge } from "@/components/intelligence/QualityBadge";
 
 export const Route = createFileRoute("/_authenticated/traffic-sources")({
   component: () => (
