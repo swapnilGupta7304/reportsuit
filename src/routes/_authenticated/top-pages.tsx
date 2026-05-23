@@ -22,6 +22,8 @@ import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { PALETTE, PALETTE_LIST, TOOLTIP_STYLE } from "@/lib/chart-palette";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
 import { readDim, readMetric, readTotal } from "@/lib/ga4-live";
+import { contentHealth, seoOpportunity } from "@/lib/intelligence";
+import { QualityBadge } from "@/components/intelligence/QualityBadge";
 
 export const Route = createFileRoute("/_authenticated/top-pages")({
   component: () => (
