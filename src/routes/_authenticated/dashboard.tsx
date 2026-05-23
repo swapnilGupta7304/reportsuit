@@ -11,6 +11,10 @@ import {
   FolderKanban,
   Plug,
   Radio,
+  Award,
+  Globe2,
+  Sparkles,
+  Target,
 } from "lucide-react";
 import {
   AreaChart,
@@ -31,15 +35,20 @@ import {
 } from "recharts";
 import { motion } from "framer-motion";
 import { useServerFn } from "@tanstack/react-start";
+import { format, differenceInCalendarDays, subDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentProject } from "@/hooks/use-current-project";
 import { useDateRange } from "@/hooks/use-date-range";
 import { EmptyState } from "@/components/EmptyState";
-import { format } from "date-fns";
 import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { CHANNEL_COLORS, PALETTE, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
-import { readTotal } from "@/lib/ga4-live";
+import { readTotal, readDim, readMetric } from "@/lib/ga4-live";
+import { compare, executiveSummary, buildAlerts, qualityScore } from "@/lib/intelligence";
+import { ExecutiveSummary } from "@/components/intelligence/ExecutiveSummary";
+import { SmartAlerts } from "@/components/intelligence/SmartAlerts";
+import { SmartInsightCard } from "@/components/intelligence/SmartInsightCard";
+import { QualityBadge } from "@/components/intelligence/QualityBadge";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({ component: Page });
 
@@ -50,7 +59,20 @@ function Page() {
   const startDate = format(range.from, "yyyy-MM-dd");
   const endDate = format(range.to, "yyyy-MM-dd");
 
+  // Previous-period date range (same length, immediately before)
+  const days = Math.max(1, differenceInCalendarDays(range.to, range.from) + 1);
+  const prevEnd = subDays(range.from, 1);
+  const prevStart = subDays(prevEnd, days - 1);
+  const prevStartDate = format(prevStart, "yyyy-MM-dd");
+  const prevEndDate = format(prevEnd, "yyyy-MM-dd");
+
   const aggFn = useServerFn(ga4Aggregate);
+  const totalsMetrics = [
+    "totalUsers", "activeUsers", "newUsers",
+    "sessions", "engagedSessions", "engagementRate",
+    "bounceRate", "userEngagementDuration", "eventCount",
+  ];
+
   const { data: live } = useQuery({
     queryKey: ["dash_live", currentProject?.id, startDate, endDate],
     enabled: !!currentProject,
@@ -59,15 +81,82 @@ function Page() {
         data: {
           projectId: currentProject!.id,
           dimensions: [],
-          metrics: [
-            "totalUsers", "activeUsers", "newUsers",
-            "sessions", "engagedSessions", "engagementRate",
-            "bounceRate", "userEngagementDuration", "eventCount",
-          ],
+          metrics: totalsMetrics,
           startDate, endDate,
         },
       }),
   });
+
+  const { data: prev } = useQuery({
+    queryKey: ["dash_prev", currentProject?.id, prevStartDate, prevEndDate],
+    enabled: !!currentProject,
+    queryFn: () =>
+      aggFn({
+        data: {
+          projectId: currentProject!.id,
+          dimensions: [],
+          metrics: totalsMetrics,
+          startDate: prevStartDate, endDate: prevEndDate,
+        },
+      }),
+  });
+
+  const { data: channelsLive } = useQuery({
+    queryKey: ["dash_ch_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["sessionPrimaryChannelGroup"],
+      metrics: ["sessions", "engagedSessions", "engagementRate", "bounceRate", "averageSessionDuration", "eventsPerSession"],
+      startDate, endDate, orderByMetric: "sessions", limit: 50,
+    }}),
+  });
+
+  const { data: channelsPrev } = useQuery({
+    queryKey: ["dash_ch_prev", currentProject?.id, prevStartDate, prevEndDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["sessionPrimaryChannelGroup"],
+      metrics: ["sessions"],
+      startDate: prevStartDate, endDate: prevEndDate, orderByMetric: "sessions", limit: 50,
+    }}),
+  });
+
+  const { data: countriesLive } = useQuery({
+    queryKey: ["dash_geo_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["country"],
+      metrics: ["sessions"],
+      startDate, endDate, orderByMetric: "sessions", limit: 10,
+    }}),
+  });
+
+  const { data: devicesLive } = useQuery({
+    queryKey: ["dash_dev_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["deviceCategory"],
+      metrics: ["sessions", "totalUsers"],
+      startDate, endDate, orderByMetric: "sessions", limit: 10,
+    }}),
+  });
+
+  const { data: topPagesLive } = useQuery({
+    queryKey: ["dash_pages_live", currentProject?.id, startDate, endDate],
+    enabled: !!currentProject,
+    queryFn: () => aggFn({ data: {
+      projectId: currentProject!.id,
+      dimensions: ["pagePath"],
+      metrics: ["screenPageViews", "activeUsers", "bounceRate", "userEngagementDuration"],
+      startDate, endDate, orderByMetric: "screenPageViews", limit: 25,
+    }}),
+  });
+
+
 
   const { data: metrics } = useQuery({
     queryKey: ["website_metrics", currentProject?.id, range.from, range.to],
