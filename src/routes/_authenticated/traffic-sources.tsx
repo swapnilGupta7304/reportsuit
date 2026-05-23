@@ -182,6 +182,7 @@ function Inner() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Channel</TableHead>
+                  <TableHead>Quality</TableHead>
                   <TableHead className="text-right">Sessions</TableHead>
                   <TableHead className="text-right">Engaged Sessions</TableHead>
                   <TableHead className="text-right">Engagement Rate</TableHead>
@@ -192,23 +193,30 @@ function Inner() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agg.map((r, i) => (
-                  <TableRow key={r.name} className="hover:bg-muted/40">
-                    <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="inline-block size-2.5 rounded-full" style={{ background: colorFor(r.name, CHANNEL_COLORS, i) }} />
-                        {r.name}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.engaged.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.engRate.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right">{r.avgEng.toFixed(1)}s</TableCell>
-                    <TableCell className="text-right">{r.bounce.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right">{r.eps.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">{r.ev.toLocaleString()}</TableCell>
-                  </TableRow>
-                ))}
+                {agg.map((r, i) => {
+                  const q = qualityScore({
+                    engagementRate: r.engRate, bounceRate: r.bounce,
+                    avgEngagementSec: r.avgEng, eventsPerSession: r.eps,
+                  });
+                  return (
+                    <TableRow key={r.name} className="hover:bg-muted/40">
+                      <TableCell className="font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-block size-2.5 rounded-full" style={{ background: colorFor(r.name, CHANNEL_COLORS, i) }} />
+                          {r.name}
+                        </span>
+                      </TableCell>
+                      <TableCell><QualityBadge q={q} /></TableCell>
+                      <TableCell className="text-right">{r.sessions.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.engaged.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.engRate.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right">{r.avgEng.toFixed(1)}s</TableCell>
+                      <TableCell className="text-right">{r.bounce.toFixed(1)}%</TableCell>
+                      <TableCell className="text-right">{r.eps.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{r.ev.toLocaleString()}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </motion.div>
