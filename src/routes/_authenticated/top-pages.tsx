@@ -185,6 +185,8 @@ function Inner() {
                 <TableRow>
                   <TableHead>Page path</TableHead>
                   <TableHead>Trend</TableHead>
+                  <TableHead>Health</TableHead>
+                  <TableHead>SEO Opp.</TableHead>
                   <TableHead className="text-right">Total Users</TableHead>
                   <TableHead className="text-right">Active Users</TableHead>
                   <TableHead className="text-right">New Users</TableHead>
@@ -194,35 +196,52 @@ function Inner() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agg.map((r, i) => (
-                  <TableRow key={r.page_path} className="hover:bg-muted/40">
-                    <TableCell className="font-mono text-xs max-w-md truncate">
-                      <span className="inline-flex items-center gap-2">
-                        <span className="inline-block size-2 rounded-full" style={{ background: PALETTE_LIST[i % PALETTE_LIST.length] }} />
-                        {r.page_path}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="h-8 w-24">
-                        {r.trend.length > 1 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={r.trend}>
-                              <Line type="monotone" dataKey="v" stroke={PALETTE_LIST[i % PALETTE_LIST.length]} strokeWidth={2} dot={false} isAnimationActive={false} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">{r.totalUsers.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.activeUsers.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.newUsers.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.returningUsers.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.viewsPerActiveUser.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">{r.bounceRate.toFixed(2)}%</TableCell>
-                  </TableRow>
-                ))}
+                {agg.map((r, i) => {
+                  const topAU = Math.max(1, ...agg.map((x) => x.activeUsers));
+                  const totalAU = Math.max(1, agg.reduce((s, x) => s + x.activeUsers, 0));
+                  const health = contentHealth({
+                    bounceRate: r.bounceRate,
+                    viewsPerActiveUser: r.viewsPerActiveUser,
+                    activeUsers: r.activeUsers,
+                    topActiveUsers: topAU,
+                  });
+                  const seo = seoOpportunity({
+                    bounceRate: r.bounceRate,
+                    viewsPerActiveUser: r.viewsPerActiveUser,
+                    activeUsersShare: r.activeUsers / totalAU,
+                  });
+                  return (
+                    <TableRow key={r.page_path} className="hover:bg-muted/40">
+                      <TableCell className="font-mono text-xs max-w-md truncate">
+                        <span className="inline-flex items-center gap-2">
+                          <span className="inline-block size-2 rounded-full" style={{ background: PALETTE_LIST[i % PALETTE_LIST.length] }} />
+                          {r.page_path}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="h-8 w-24">
+                          {r.trend.length > 1 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={r.trend}>
+                                <Line type="monotone" dataKey="v" stroke={PALETTE_LIST[i % PALETTE_LIST.length]} strokeWidth={2} dot={false} isAnimationActive={false} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell><QualityBadge q={health} compact /></TableCell>
+                      <TableCell><QualityBadge q={seo} compact /></TableCell>
+                      <TableCell className="text-right">{r.totalUsers.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.activeUsers.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.newUsers.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.returningUsers.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">{r.viewsPerActiveUser.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{r.bounceRate.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </motion.div>
