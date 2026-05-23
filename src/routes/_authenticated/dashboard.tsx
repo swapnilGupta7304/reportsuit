@@ -356,6 +356,92 @@ function Page() {
         </div>
       </motion.div>
 
+      {/* ─── Executive Summary ─── */}
+      <ExecutiveSummary bullets={summary} />
+
+      {/* ─── Traffic Quality Index (custom KPI) ─── */}
+      {topChannel && topChannelQuality && (
+        <div className="rounded-2xl border bg-gradient-to-br from-card to-primary-soft/20 p-5 shadow-card flex flex-wrap items-center gap-4">
+          <div className="size-10 rounded-xl gradient-primary text-primary-foreground grid place-items-center">
+            <Award className="size-5" />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Traffic Quality Index</div>
+            <div className="font-display text-2xl font-bold mt-0.5">
+              {qualityScore({ engagementRate: avgEng, bounceRate: avgBounce, avgEngagementSec: avgDurSec, eventsPerSession: eps }).score}
+              <span className="text-base font-normal text-muted-foreground"> / 100</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">Weighted: engagement, bounce, duration, events/session</div>
+          </div>
+          <QualityBadge q={qualityScore({ engagementRate: avgEng, bounceRate: avgBounce, avgEngagementSec: avgDurSec, eventsPerSession: eps })} />
+          <div className="hidden md:block h-10 w-px bg-border" />
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Top channel</div>
+            <div className="text-sm font-semibold">{topChannel.name} · {(topChannelShare * 100).toFixed(0)}%</div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Smart Insight Cards ─── */}
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {topChannel && (
+          <SmartInsightCard
+            icon={Target}
+            accent={PALETTE.orange}
+            label="Highest performing channel"
+            headline={topChannel.name}
+            detail={`${topChannel.sessions.toLocaleString()} sessions (${(topChannelShare * 100).toFixed(0)}% share) · ${topChannel.engRate.toFixed(0)}% engagement`}
+            pct={channelDeltas.find((c) => c.name === topChannel.name)?.sessions.pct}
+            recommendation="Sustain investment and expand creative variants on this channel."
+            delay={0}
+          />
+        )}
+        {topCountry && (
+          <SmartInsightCard
+            icon={Globe2}
+            accent={PALETTE.blue}
+            label="Fastest growing geography"
+            headline={topCountry.name}
+            detail={`${topCountry.sessions.toLocaleString()} sessions from this market in the selected period.`}
+            recommendation="Localize content and consider geo-targeted campaigns."
+            delay={0.05}
+          />
+        )}
+        {bestPage && (
+          <SmartInsightCard
+            icon={Sparkles}
+            accent={PALETTE.purple}
+            label="Most engaging page"
+            headline={bestPage.path}
+            detail={`${bestPage.engPerUser.toFixed(0)}s avg engagement per user · ${bestPage.au.toLocaleString()} active users.`}
+            recommendation="Mirror this page's structure on lower-performing pages."
+            delay={0.1}
+          />
+        )}
+        {worstPage && worstPage.bounce > 60 && (
+          <SmartInsightCard
+            icon={Activity}
+            accent={PALETTE.pink}
+            label="Highest bounce page"
+            headline={worstPage.path}
+            detail={`${worstPage.bounce.toFixed(0)}% bounce rate — visitors leaving without engaging.`}
+            recommendation="Audit page speed, intent match, and primary CTA."
+            delay={0.15}
+          />
+        )}
+      </div>
+
+      {/* ─── Smart Alerts ─── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display font-semibold text-lg">Smart Alerts</h2>
+          <span className="text-xs text-muted-foreground">vs previous {days} days</span>
+        </div>
+        <SmartAlerts alerts={alerts} />
+      </section>
+
+
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <GradientKpi label="Total Users" value={totals.users.toLocaleString()} from={PALETTE.orange} to="#ffb347" delay={0} />
         <GradientKpi label="Active Users" value={totals.active.toLocaleString()} from={PALETTE.blue} to={PALETTE.cyan} delay={0.05} />
