@@ -97,10 +97,39 @@ function Inner() {
           onAction={() => nav({ to: "/settings" })}
         />
       ) : (
-        <div className="grid lg:grid-cols-2 gap-6">
-          <DonutCard title="Device category" subtitle="Mobile · Desktop · Tablet" rows={byCat} colorMap={DEVICE_COLORS} gradientId="dev-cat" delay={0} />
-          <DonutCard title="Operating system" subtitle="Active users by OS" rows={byOs} colorMap={OS_COLORS} gradientId="dev-os" delay={0.1} />
-        </div>
+        <>
+          <div className="grid lg:grid-cols-2 gap-6">
+            <DonutCard title="Device category" subtitle="Mobile · Desktop · Tablet" rows={byCat} colorMap={DEVICE_COLORS} gradientId="dev-cat" delay={0} />
+            <DonutCard title="Operating system" subtitle="Active users by OS" rows={byOs} colorMap={OS_COLORS} gradientId="dev-os" delay={0.1} />
+          </div>
+          {(() => {
+            const totalCat = byCat.reduce((s, r) => s + r.users, 0);
+            const topCat = [...byCat].sort((a, b) => b.users - a.users)[0];
+            const topOs = [...byOs].sort((a, b) => b.users - a.users)[0];
+            const bestEng = [...byCat].filter((r) => r.users > 0).sort((a, b) => (b.sessions / b.users) - (a.sessions / a.users))[0];
+            const cards = [];
+            if (topCat) cards.push({
+              icon: topCat.key.toLowerCase().includes("mobile") ? Smartphone : Monitor,
+              accent: PALETTE.orange, label: "Best performing device",
+              headline: topCat.key,
+              detail: `${topCat.users.toLocaleString()} active users · ${totalCat ? ((topCat.users / totalCat) * 100).toFixed(0) : 0}% of total.`,
+              recommendation: "Prioritize this device in QA and design reviews.",
+            });
+            if (topOs) cards.push({
+              icon: Sparkles, accent: PALETTE.blue, label: "Leading operating system",
+              headline: topOs.key,
+              detail: `${topOs.users.toLocaleString()} active users on this OS.`,
+              recommendation: "Test critical flows on this OS first.",
+            });
+            if (bestEng && bestEng.users > 10) cards.push({
+              icon: Sparkles, accent: PALETTE.green, label: "Most engaged device",
+              headline: bestEng.key,
+              detail: `${(bestEng.sessions / bestEng.users).toFixed(2)} engaged sessions per user.`,
+              recommendation: "Mirror this experience on lower-engagement form factors.",
+            });
+            return <IntelligencePanel cards={cards} />;
+          })()}
+        </>
       )}
     </div>
   );
