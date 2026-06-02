@@ -161,6 +161,32 @@ function Inner() {
               })}
             </div>
           </ChartCard>
+
+          {(() => {
+            const topC = byCountry[0];
+            const topCity = byCity[0];
+            const bestEng = [...byCountry].filter((r) => r.users >= Math.max(20, totalUsers * 0.02)).sort((a, b) => b.engRate - a.engRate)[0];
+            const cards = [];
+            if (topC) cards.push({
+              icon: Globe2, accent: PALETTE.orange, label: "Top geography",
+              headline: topC.key,
+              detail: `${topC.users.toLocaleString()} users · ${topC.sessions.toLocaleString()} sessions.`,
+              recommendation: "Localize key landing pages for this market.",
+            });
+            if (topCity) cards.push({
+              icon: MapPinned, accent: PALETTE.purple, label: "Leading city",
+              headline: topCity.key,
+              detail: `${topCity.users.toLocaleString()} users from this city.`,
+              recommendation: "Consider city-level campaigns or events.",
+            });
+            if (bestEng && bestEng !== topC) cards.push({
+              icon: Sparkles, accent: PALETTE.green, label: "Highest retention geography",
+              headline: bestEng.key,
+              detail: `${bestEng.engRate.toFixed(0)}% engagement · ${bestEng.users.toLocaleString()} users.`,
+              recommendation: "Invest in deeper content for this audience.",
+            });
+            return <IntelligencePanel cards={cards} />;
+          })()}
         </>
       )}
     </div>
