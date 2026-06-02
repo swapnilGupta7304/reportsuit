@@ -11,6 +11,7 @@ import { ModuleHeader } from "@/components/ModuleHeader";
 import { NoProjectGate } from "@/components/NoProject";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 
 export const Route = createFileRoute("/_authenticated/app-analytics")({ component: () => <NoProjectGate><Inner /></NoProjectGate> });
 
