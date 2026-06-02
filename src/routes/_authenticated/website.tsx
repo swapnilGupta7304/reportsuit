@@ -119,6 +119,17 @@ function Inner() {
               </ResponsiveContainer>
             </ChartCard>
           </div>
+          <IntelligencePanel
+            quality={{
+              score: qualityScore({ engagementRate, bounceRate, avgEngagementSec: avgEngTime, eventsPerSession: sessions > 0 ? eventCount / sessions : 0 }),
+            }}
+            cards={[
+              { icon: Users, accent: "#ff6b00", label: "Audience", headline: totalUsers.toLocaleString(), detail: `${newUsers.toLocaleString()} new · ${returningUsers.toLocaleString()} returning.`, recommendation: returningUsers > newUsers ? "Strong retention — nurture with email/push." : "New-user heavy — focus on activation flows." },
+              { icon: Activity, accent: "#22c55e", label: "Engagement", headline: `${engagementRate.toFixed(1)}%`, detail: `${avgEngTime.toFixed(0)}s avg engagement · ${sessions.toLocaleString()} sessions.`, recommendation: engagementRate < 50 ? "Audit landing pages and CTAs." : "Maintain content cadence." },
+              { icon: MousePointer, accent: "#3b82f6", label: "Event volume", headline: eventCount.toLocaleString(), detail: `${(sessions > 0 ? eventCount / sessions : 0).toFixed(2)} events per session.`, recommendation: "Tag conversion events to enable funnel analysis." },
+              { icon: TrendingUp, accent: "#ec4899", label: "Bounce rate", headline: `${bounceRate.toFixed(1)}%`, detail: bounceRate > 60 ? "High bounce — investigate intent match." : "Healthy — visitors are exploring.", recommendation: bounceRate > 60 ? "Strengthen above-the-fold value prop." : "Keep monitoring weekly." },
+            ]}
+          />
         </>
       )}
     </div>
