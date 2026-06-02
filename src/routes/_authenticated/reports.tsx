@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { FileText as FileIcon, Database, Calendar } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/reports")({ component: () => <NoProjectGate><Inner /></NoProjectGate> });
 
