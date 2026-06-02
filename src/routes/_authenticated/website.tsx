@@ -14,6 +14,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
 import { readTotal } from "@/lib/ga4-live";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { qualityScore } from "@/lib/intelligence";
 
 export const Route = createFileRoute("/_authenticated/website")({ component: Page });
 
