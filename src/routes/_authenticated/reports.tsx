@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { FileText as FileIcon, Database, Calendar } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/reports")({ component: () => <NoProjectGate><Inner /></NoProjectGate> });
 
@@ -80,6 +82,14 @@ function Inner() {
           </Table>
         )}
       </div>
+
+      <IntelligencePanel
+        cards={[
+          { icon: Database, accent: "#ff6b00", label: "Snapshots in range", headline: (data?.length ?? 0).toLocaleString(), detail: `From ${from} to ${to}.`, recommendation: (data?.length ?? 0) === 0 ? "Trigger a sync from Settings to populate snapshots." : "Schedule weekly exports for stakeholders." },
+          { icon: Calendar, accent: "#3b82f6", label: "Coverage", headline: data?.length ? `${new Set(data.map((r) => r.snapshot_date)).size} days` : "—", detail: "Distinct snapshot days available for export.", recommendation: "Ensure daily sync stays healthy." },
+          { icon: FileIcon, accent: "#22c55e", label: "Exportable tables", headline: "7", detail: "Website, traffic, pages, devices, geo, events, app.", recommendation: "Bundle CSVs for monthly executive packs." },
+        ]}
+      />
     </div>
   );
 }

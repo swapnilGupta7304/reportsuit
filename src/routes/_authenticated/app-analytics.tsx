@@ -11,6 +11,7 @@ import { ModuleHeader } from "@/components/ModuleHeader";
 import { NoProjectGate } from "@/components/NoProject";
 import { EmptyState } from "@/components/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
 
 export const Route = createFileRoute("/_authenticated/app-analytics")({ component: () => <NoProjectGate><Inner /></NoProjectGate> });
 
@@ -72,6 +73,14 @@ function Inner() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          <IntelligencePanel
+            cards={[
+              { icon: Download, accent: "#ff6b00", label: "Installs", headline: t.inst.toLocaleString(), detail: `${t.org.toLocaleString()} organic · ${t.un.toLocaleString()} uninstalls.`, recommendation: "Sustain ASO and review velocity to keep organic share growing." },
+              { icon: Users, accent: "#3b82f6", label: "Active audience", headline: `${t.dau.toLocaleString()} DAU`, detail: `${t.mau.toLocaleString()} MAU · ${t.mau ? ((t.dau / t.mau) * 100).toFixed(1) : "0"}% stickiness.`, recommendation: "Push engagement loops to lift DAU/MAU ratio." },
+              { icon: Star, accent: "#22c55e", label: "Quality signal", headline: t.n ? (t.rating / t.n).toFixed(2) + "★" : "—", detail: `Avg crash ${t.n ? (t.crash / t.n).toFixed(2) : "0"}% · ANR ${t.n ? (t.anr / t.n).toFixed(2) : "0"}%.`, recommendation: t.n && (t.crash / t.n) > 1 ? "Investigate top crash clusters this release." : "Quality stable — keep release cadence." },
+              { icon: Activity, accent: "#a855f7", label: "Retention", headline: t.n ? (t.ret / t.n).toFixed(1) + "%" : "—", detail: "Average retention across the selected window.", recommendation: "Run cohort analysis to find retention cliffs." },
+            ]}
+          />
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Smartphone className="size-3" /> {currentProject?.name} · {rows.length} daily snapshots</div>
         </>
       )}
