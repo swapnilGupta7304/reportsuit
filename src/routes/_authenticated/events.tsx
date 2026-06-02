@@ -155,6 +155,32 @@ function Inner() {
               </TableBody>
             </Table>
           </motion.div>
+
+          {(() => {
+            const top = agg[0];
+            const topConv = agg.find((e) => CONVERSION_EVENTS.has(e.event_name));
+            const mostUsers = [...agg].sort((a, b) => b.users - a.users)[0];
+            const cards = [];
+            if (top) cards.push({
+              icon: Award, accent: PALETTE.orange, label: "Top event",
+              headline: top.event_name,
+              detail: `${top.event_count.toLocaleString()} fires · ${top.users.toLocaleString()} users.`,
+              recommendation: "Use this signal to power audience segments.",
+            });
+            if (topConv) cards.push({
+              icon: Target, accent: PALETTE.green, label: "Top converting event",
+              headline: topConv.event_name,
+              detail: `${topConv.event_count.toLocaleString()} conversions · ${topConv.users.toLocaleString()} users.`,
+              recommendation: "Build remarketing audiences and optimization goals around this event.",
+            });
+            if (mostUsers && mostUsers !== top) cards.push({
+              icon: Sparkles, accent: PALETTE.blue, label: "Broadest reach event",
+              headline: mostUsers.event_name,
+              detail: `${mostUsers.users.toLocaleString()} unique users triggered this event.`,
+              recommendation: "Strong top-of-funnel signal — feed into onboarding flows.",
+            });
+            return <IntelligencePanel cards={cards} />;
+          })()}
         </>
       )}
     </div>
