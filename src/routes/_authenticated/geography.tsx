@@ -18,6 +18,8 @@ import { ChartCard, GradientKpi } from "@/components/ChartCard";
 import { PALETTE, PALETTE_LIST, TOOLTIP_STYLE } from "@/lib/chart-palette";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
 import { readDim, readMetric, readTotal } from "@/lib/ga4-live";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { Globe2, MapPinned, Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/geography")({
   component: () => (
