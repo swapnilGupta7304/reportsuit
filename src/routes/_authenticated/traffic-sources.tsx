@@ -312,6 +312,18 @@ function Inner() {
               </TableBody>
             </Table>
           </motion.div>
+
+          <IntelligencePanel
+            bullets={bullets}
+            quality={{
+              score: overallQuality,
+              topLabel: topChannel ? "Top channel" : undefined,
+              topValue: topChannel ? `${topChannel.name} · ${(topChannelShare * 100).toFixed(0)}%` : undefined,
+            }}
+            cards={insightCards}
+            alerts={alerts}
+            rangeLabel={`vs previous ${days} days`}
+          />
         </>
       )}
     </div>
