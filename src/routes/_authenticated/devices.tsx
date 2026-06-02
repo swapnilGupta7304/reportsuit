@@ -21,6 +21,9 @@ import { ChartCard } from "@/components/ChartCard";
 import { DEVICE_COLORS, OS_COLORS, PALETTE_LIST, TOOLTIP_STYLE, colorFor } from "@/lib/chart-palette";
 import { ga4Aggregate } from "@/lib/ga4-live.functions";
 import { readDim, readMetric } from "@/lib/ga4-live";
+import { IntelligencePanel } from "@/components/intelligence/IntelligencePanel";
+import { Smartphone, Monitor, Sparkles } from "lucide-react";
+import { PALETTE } from "@/lib/chart-palette";
 
 export const Route = createFileRoute("/_authenticated/devices")({
   component: () => (
