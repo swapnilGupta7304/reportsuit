@@ -247,6 +247,57 @@ function Inner() {
               </TableBody>
             </Table>
           </motion.div>
+
+          {(() => {
+            const totalAU = Math.max(1, agg.reduce((s, x) => s + x.activeUsers, 0));
+            const topAU = Math.max(1, ...agg.map((x) => x.activeUsers));
+            const ranked = agg.map((r) => ({
+              ...r,
+              health: contentHealth({
+                bounceRate: r.bounceRate,
+                viewsPerActiveUser: r.viewsPerActiveUser,
+                activeUsers: r.activeUsers,
+                topActiveUsers: topAU,
+              }),
+              seo: seoOpportunity({
+                bounceRate: r.bounceRate,
+                viewsPerActiveUser: r.viewsPerActiveUser,
+                activeUsersShare: r.activeUsers / totalAU,
+              }),
+            }));
+            const topPage = ranked[0];
+            const bestHealth = [...ranked].sort((a, b) => b.health.score - a.health.score)[0];
+            const bestSeo = [...ranked].sort((a, b) => b.seo.score - a.seo.score)[0];
+            const worstBounce = [...ranked]
+              .filter((r) => r.activeUsers / topAU >= 0.05)
+              .sort((a, b) => b.bounceRate - a.bounceRate)[0];
+            const cards = [];
+            if (topPage) cards.push({
+              icon: Target, accent: PALETTE.orange, label: "Top page by views",
+              headline: topPage.page_path,
+              detail: `${topPage.pageviews.toLocaleString()} views · ${topPage.activeUsers.toLocaleString()} active users.`,
+              recommendation: "Keep CTAs and internal links current — this is your funnel anchor.",
+            });
+            if (bestHealth) cards.push({
+              icon: Sparkles, accent: PALETTE.green, label: "Healthiest content",
+              headline: bestHealth.page_path,
+              detail: `Content health ${bestHealth.health.score}/100 · ${bestHealth.bounceRate.toFixed(0)}% bounce.`,
+              recommendation: "Mirror this page's structure on weaker pages.",
+            });
+            if (bestSeo) cards.push({
+              icon: TrendingUp, accent: PALETTE.blue, label: "Biggest SEO opportunity",
+              headline: bestSeo.page_path,
+              detail: `SEO score ${bestSeo.seo.score}/100 — strong engagement, low traffic share.`,
+              recommendation: "Invest in keyword targeting and internal linking for this page.",
+            });
+            if (worstBounce && worstBounce.bounceRate > 60) cards.push({
+              icon: Activity, accent: PALETTE.pink, label: "Highest bounce page",
+              headline: worstBounce.page_path,
+              detail: `${worstBounce.bounceRate.toFixed(0)}% bounce — visitors leaving without engaging.`,
+              recommendation: "Audit page speed, intent match, and primary CTA.",
+            });
+            return <IntelligencePanel cards={cards} />;
+          })()}
         </>
       )}
     </div>
