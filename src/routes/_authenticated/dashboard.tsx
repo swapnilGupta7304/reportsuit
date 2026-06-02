@@ -224,6 +224,15 @@ function Page() {
   const sessionsLive = live ? readTotal(live, "sessions") : 0;
   const engagedLive = live ? readTotal(live, "engagedSessions") : 0;
   const eventsLive = live ? readTotal(live, "eventCount") : 0;
+  // Organic traffic: sum of Organic Search / Social / Video / Shopping sessions
+  // straight from the GA4 sessionPrimaryChannelGroup query (matches GA4 UI exactly).
+  const ORGANIC_CHANNELS = new Set([
+    "Organic Search", "Organic Social", "Organic Video", "Organic Shopping",
+  ]);
+  const organicSessions = (channelsLive?.rows ?? []).reduce((s, r) => {
+    const name = readDim(channelsLive!, r, "sessionPrimaryChannelGroup");
+    return ORGANIC_CHANNELS.has(name) ? s + readMetric(channelsLive!, r, "sessions") : s;
+  }, 0);
   const totals = {
     users: totalUsersLive,
     active: activeUsersLive,
@@ -231,7 +240,7 @@ function Page() {
     ret: Math.max(0, totalUsersLive - newUsersLive),
     sessions: sessionsLive,
     events: eventsLive,
-    organic: 0,
+    organic: organicSessions,
   };
 
   const avgEng = sessionsLive > 0 ? (engagedLive / sessionsLive) * 100 : 0;
